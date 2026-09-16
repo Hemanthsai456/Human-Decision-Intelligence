@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it as below."
+
+title: "Human Decision Making Under Risk and Ambiguity"
+type: software
+authors:
+  - family-names: "Charagundla"
+    given-names: "Hemanth Sai"
+
+abstract: "An R-based data science project investigating human decision-making under risk, ambiguity, and feedback using the CPC18 and choices13k datasets."
+
+keywords:
+  - decision-making
+  - uncertainty
+  - risk
+  - ambiguity
+  - machine learning
+  - data science
+  - R
+
+repository-code: "YOUR_GITHUB_REPOSITORY_URL"
