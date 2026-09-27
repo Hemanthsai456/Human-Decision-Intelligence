@@ -47,3 +47,8 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# renv local library and temporary files
+renv/library/
+renv/staging/
+renv/sandbox/
