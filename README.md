@@ -1,1 +1,1 @@
-# Human-Decision-Making-Under-Risk-and-Ambiguity
+# Human Decision Intelligence

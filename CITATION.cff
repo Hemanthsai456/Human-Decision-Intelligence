@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this project, please cite it as below."
 
-title: "Decision Intelligence Under Uncertainty"
+title: "Human Decision Intelligence"
 type: software
 
 authors:
@@ -23,4 +23,4 @@ keywords:
 * data-science
 * R
 
-repository-code: "https://github.com/Hemanthsai456/Decision-Intelligence-Under-Uncertainty"
+repository-code: "https://github.com/Hemanthsai456/Human-Decision-Intelligence"

@@ -1,6 +1,6 @@
 # Data Sources
 
-This project uses two publicly available datasets related to human decision-making under uncertainty.
+This project uses two publicly available datasets related to Human Decision Intelligence.
 
 ## 1. CPC18 — Choice Prediction Competition 2018
 
