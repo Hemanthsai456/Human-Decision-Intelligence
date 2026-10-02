@@ -1,0 +1,131 @@
+---
+title: "Stage 06 — Exploratory Data Analysis"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+# 1. Purpose
+
+This stage performs exploratory data analysis on the feature-enhanced CPC18 dataset.
+
+The analysis examines decision behavior, expected payoff and probability differences, experimental conditions, temporal patterns, relationships among engineered features, and reaction-time data.
+
+The purpose is to identify descriptive patterns that can guide the formal statistical analysis in Stage 07.
+
+# 2. Prerequisites and Execution Order
+
+Stage 06 depends on the validated and feature-enhanced CPC18 dataset.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct mathematically meaningful decision features.
+5. `R/06_eda.R` — perform exploratory analysis.
+6. `reports/06_eda.Rmd` — document the exploratory findings.
+
+The project root is explicitly set as the working directory before the pipeline scripts are sourced.
+
+# 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+knitr::opts_chunk$set(out.width = "60%", fig.align = "center")
+
+library(dplyr)
+library(ggplot2)
+library(knitr)
+```
+
+# 4. Run Exploratory Analysis
+
+The Stage 06 analysis is implemented in `R/06_eda.R`.
+
+The script generates the EDA summaries and visualizations used in this report. Plots are also saved as PNG files in `outputs/eda/`.
+
+```{r run-eda, include=FALSE}
+source("R/06_eda.R")
+```
+
+# 5. Decision Behavior
+
+The overall choice distribution establishes the baseline proportion of A and B selections.
+
+```{r choice-summary, echo=FALSE}
+kable(choice_summary, digits = 3)
+```
+
+```{r choice-distribution, echo=FALSE}
+eda_plots$choice_distribution
+```
+
+Choice behavior is then examined across differences in expected payoff and probability between options A and B.
+
+```{r choice-by-ev, echo=FALSE}
+eda_plots$choice_by_ev
+```
+
+```{r choice-by-probability, echo=FALSE}
+eda_plots$choice_by_probability
+```
+
+These plots provide descriptive evidence about how relative decision attributes correspond to observed choice behavior.
+
+# 6. Experimental and Temporal Conditions
+
+Choice behavior is explored across ambiguity and feedback conditions.
+
+```{r choice-by-ambiguity, echo=FALSE}
+eda_plots$choice_by_ambiguity
+```
+
+```{r choice-by-feedback, echo=FALSE}
+eda_plots$choice_by_feedback
+```
+
+Temporal patterns are examined across time blocks and game order.
+
+```{r choice-by-block, echo=FALSE}
+eda_plots$choice_by_block
+```
+
+```{r choice-by-order, echo=FALSE}
+eda_plots$choice_by_order
+```
+
+These analyses are descriptive and are used to identify relationships that may require formal testing.
+
+# 7. Feature Relationships
+
+The engineered numerical variables are examined through pairwise correlations to identify strongly related predictors and potential redundancy before statistical modelling and machine learning.
+
+```{r feature-correlations, echo=FALSE}
+kable(round(feature_correlations, 2))
+```
+
+Correlation is treated as a descriptive measure and not as evidence of causation.
+
+# 8. Reaction-Time Exploration
+
+Reaction-time data are explored separately because RT is unavailable for a substantial portion of the dataset.
+
+The analysis summarizes RT availability and examines the distribution of positive RT observations.
+
+```{r rt-summary, echo=FALSE}
+kable(rt_summary, digits = 2)
+```
+
+```{r rt-distribution, echo=FALSE}
+eda_plots$reaction_time_distribution
+```
+
+The logarithmic x-axis is used to make the spread of reaction times easier to inspect.
+
+# 9. EDA Summary
+
+Stage 06 establishes the main descriptive patterns in the CPC18 decision data.
+
+The observed relationships between decision attributes, experimental conditions, temporal variables, and choice behavior provide the basis for defining the formal statistical questions addressed in Stage 07.
+
+No formal hypothesis-testing conclusions or causal interpretations are made at this stage.

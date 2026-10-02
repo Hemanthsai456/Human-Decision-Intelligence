@@ -9,10 +9,9 @@
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
-<meta name="author" content="Hemanth Sai Charagundla" />
 
 
-<title>Stage 03 — Data Cleaning and Validation</title>
+<title>03_data_cleaning.knit</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -349,446 +348,139 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Stage 03 — Data Cleaning and
-Validation</h1>
-<h4 class="author">Hemanth Sai Charagundla</h4>
 
 </div>
 
 
-<div id="objective" class="section level1">
-<h1>1. Objective</h1>
-<p>The objective of this stage is to construct validated analytical
-versions of the CPC18 and choices13k datasets while preserving the
-original raw data.</p>
+<table>
+<tbody>
+<tr class="odd">
+<td>title: “Stage 03 — Data Cleaning”</td>
+</tr>
+<tr class="even">
+<td>author: “Hemanth Sai Charagundla”</td>
+</tr>
+<tr class="odd">
+<td>output: html_document</td>
+</tr>
+</tbody>
+</table>
+<div id="purpose" class="section level2">
+<h2>1. Purpose</h2>
+<p>This stage creates a clean analytical copy of the raw CPC18 dataset
+while preserving the original source file.</p>
+<p>The cleaning process assigns meaningful variable names, standardizes
+character values, validates expected data types, records reaction-time
+availability, and removes exact duplicate rows if present.</p>
 </div>
-<div id="prerequisites-and-execution-order" class="section level1">
-<h1>2. Prerequisites and Execution Order</h1>
-<p>Stage 03 depends on the raw datasets loaded by
-<code>R/01_data_loading.R</code>.</p>
-<p>The required execution order is:</p>
-<ol style="list-style-type: decimal">
-<li><code>R/01_data_loading.R</code> — loads and standardises the raw
-datasets in memory.</li>
-<li><code>R/03_data_cleaning.R</code> — validates, cleans, and saves the
-processed datasets and validation reports.</li>
-<li><code>reports/03_data_cleaning.Rmd</code> — documents the cleaning
-and validation results.</li>
-</ol>
-<p><code>R/02_data_profiling.R</code> is a separate profiling stage and
-does not need to be executed as a prerequisite for the cleaning script
-itself.</p>
-<p>The Stage 03 report is located inside the <code>reports/</code>
-directory, so the project root is explicitly set as the working
-directory before the pipeline scripts are sourced.</p>
-<p>The following pipeline scripts are required for this report:</p>
+<div id="load-required-packages" class="section level2">
+<h2>2. Load Required Packages</h2>
+</div>
+<div id="load-and-clean-dataset" class="section level2">
+<h2>3. Load and Clean Dataset</h2>
 <pre class="r"><code>source(&quot;R/01_data_loading.R&quot;)</code></pre>
-<pre><code>## [1] &quot;Raw datasets loaded successfully.&quot;
-## CPC18: 694500 rows x 30 columns
-## choices13k: 14568 rows x 16 columns</code></pre>
+<pre><code>## [1] &quot;Raw dataset loaded successfully.&quot;
+## CPC18: 694500 rows x 30 columns</code></pre>
 <pre class="r"><code>source(&quot;R/03_data_cleaning.R&quot;)</code></pre>
-<p><code>R/01_data_loading.R</code> must run first because
-<code>R/03_data_cleaning.R</code> expects the objects
-<code>cpc18_raw</code> and <code>choices13k_raw</code> to already exist
-in memory.</p>
-<p>The cleaning script then creates:</p>
+<pre><code>## CPC18 cleaned dataset: 694500 rows x 31 columns
+## Rows removed: 0 
+## RT available: 360000 observations
+## RT unavailable: 334500 observations</code></pre>
+<p>The cleaning script creates the in-memory analytical dataset
+<code>cpc18_cleaned</code> and saves it to:</p>
+<pre class="text"><code>data/processed/cpc18_cleaned.csv</code></pre>
+</div>
+<div id="meaningful-variable-names" class="section level2">
+<h2>4. Meaningful Variable Names</h2>
+<p>The original CPC18 variable names are replaced with descriptive names
+based on the CPC18 data dictionary.</p>
+<p>Examples include:</p>
 <ul>
-<li><code>cpc18_clean</code></li>
-<li><code>choices13k_clean</code></li>
-<li><code>cpc18_cleaning_report</code></li>
-<li><code>choices13k_cleaning_report</code></li>
-<li><code>cleaning_summary</code></li>
+<li><code>ha</code> → <code>expected_value_a</code></li>
+<li><code>p_ha</code> → <code>probability_a</code></li>
+<li><code>hb</code> → <code>expected_value_b</code></li>
+<li><code>p_hb</code> → <code>probability_b</code></li>
+<li><code>amb</code> → <code>ambiguous_b</code></li>
+<li><code>corr</code> → <code>payoff_correlation</code></li>
+<li><code>b</code> → <code>chose_b</code></li>
+<li><code>rt</code> → <code>reaction_time_ms</code></li>
+<li><code>feedback</code> → <code>full_feedback</code></li>
+<li><code>block</code> → <code>time_block</code></li>
 </ul>
-<p>and writes the processed datasets and validation reports to
-<code>data/processed/</code>.</p>
+<p>This makes the analytical dataset easier to interpret while leaving
+the original raw file unchanged.</p>
 </div>
-<div id="cleaning-principles" class="section level1">
-<h1>3. Cleaning Principles</h1>
-<p>The cleaning stage follows several principles.</p>
-<ol style="list-style-type: decimal">
-<li><p><strong>Raw data preservation</strong><br />
-Original source files remain unchanged.</p></li>
-<li><p><strong>No unnecessary row removal</strong><br />
-Observations are not removed merely because values are unusual.</p></li>
-<li><p><strong>Missingness is preserved unless a justified
-transformation is required</strong><br />
-In particular, missing reaction-time values in CPC18 are retained
-because reaction time was not collected for all experimental
-sets.</p></li>
-<li><p><strong>Schema validation precedes transformation</strong><br />
-Expected variables are checked before the cleaning process is
-applied.</p></li>
-<li><p><strong>Logical validation is separated from analytical
-decisions</strong><br />
-A value that is unusual is not automatically treated as
-erroneous.</p></li>
-<li><p><strong>Row-count integrity is explicitly checked</strong><br />
-Cleaning should not silently remove observations.</p></li>
-</ol>
+<div id="data-type-validation" class="section level2">
+<h2>5. Data Type Validation</h2>
+<p>The cleaning process defines the expected data type for each CPC18
+variable and compares it with the observed type.</p>
+<p>If an unexpected type is detected, the script stops and reports the
+affected variable.</p>
+<p>This prevents incorrect data types from being silently carried into
+subsequent analysis.</p>
 </div>
-<div id="dataset-schema-validation" class="section level1">
-<h1>4. Dataset Schema Validation</h1>
-<p>The cleaning script defines expected schemas for both datasets.</p>
-<p>For CPC18, the expected variables include participant identifiers,
-experimental conditions, lottery characteristics, choices, payoffs,
-reaction time, feedback, and trial structure.</p>
-<p>For choices13k, the expected variables include problem
-characteristics, feedback, block information, lottery characteristics,
-ambiguity, correlation, and aggregate choice-rate measures.</p>
-<p>The function <code>validate_columns()</code> checks whether all
-required variables are present before cleaning proceeds.</p>
-</div>
-<div id="cpc18-cleaning" class="section level1">
-<h1>5. CPC18 Cleaning</h1>
-<div id="type-standardisation" class="section level2">
-<h2>5.1 Type Standardisation</h2>
-<p>The CPC18 cleaning function standardises variables according to their
-semantic roles.</p>
-<p>Identifiers and experimental indices are stored as integers,
-probabilities and numerical outcome variables as numeric, binary
-experimental variables as integer indicators, and reaction time as
-numeric.</p>
-<p>Reaction-time availability is calculated from the original
-reaction-time field and recorded in the cleaning validation report.</p>
-<pre class="r"><code>cpc18_cleaning_report$rt_by_set</code></pre>
-<pre><code>## # A tibble: 9 × 5
-##     set observations rt_available rt_missing rt_available_pct
-##   &lt;int&gt;        &lt;int&gt;        &lt;int&gt;      &lt;int&gt;            &lt;dbl&gt;
-## 1     1        93750            0          1                0
-## 2     2        60750            0          1                0
-## 3     3        60000            0          1                0
-## 4     4        60000            0          1                0
-## 5     5        60000            0          1                0
-## 6     6        90000        90000          0          9000000
-## 7     7        90000        90000          0          9000000
-## 8     8        90000        90000          0          9000000
-## 9     9        90000        90000          0          9000000</code></pre>
-</div>
-<div id="missing-values" class="section level2">
-<h2>5.2 Missing Values</h2>
-<p>The CPC18 profiling stage identified missing values only in the
-reaction-time variable.</p>
+<div id="reaction-time-availability" class="section level2">
+<h2>6. Reaction-Time Availability</h2>
+<p>A Boolean <code>rt_available</code> variable is created from the
+reaction-time field.</p>
 <pre class="r"><code>tibble(
-  total_observations = nrow(cpc18_clean),
-  rt_available = sum(!is.na(cpc18_clean$rt)),
-  rt_missing = sum(is.na(cpc18_clean$rt)),
-  rt_available_pct = mean(!is.na(cpc18_clean$rt)) * 100,
-  rt_missing_pct = mean(is.na(cpc18_clean$rt)) * 100
+  rt_available = c(TRUE, FALSE),
+  observations = c(
+    sum(cpc18_cleaned$rt_available),
+    sum(!cpc18_cleaned$rt_available)
+  )
 )</code></pre>
-<pre><code>## # A tibble: 1 × 5
-##   total_observations rt_available rt_missing rt_available_pct rt_missing_pct
-##                &lt;int&gt;        &lt;int&gt;      &lt;int&gt;            &lt;dbl&gt;          &lt;dbl&gt;
-## 1             694500       360000     334500             51.8           48.2</code></pre>
-<p>The observed reaction-time pattern is structured by experimental set
-rather than randomly distributed across the dataset.</p>
-<p>Therefore, reaction-time missingness is preserved rather than imputed
-during this stage.</p>
+<pre><code>## # A tibble: 2 × 2
+##   rt_available observations
+##   &lt;lgl&gt;               &lt;int&gt;
+## 1 TRUE               360000
+## 2 FALSE              334500</code></pre>
+<p>The resulting indicator distinguishes observations where reaction
+time was recorded from those where it was unavailable.</p>
+<p>Reaction-time values themselves are not imputed or removed during
+this stage.</p>
 </div>
-<div id="duplicate-validation" class="section level2">
-<h2>5.3 Duplicate Validation</h2>
-<pre class="r"><code>cpc18_cleaning_report$duplicates</code></pre>
+<div id="duplicate-removal" class="section level2">
+<h2>7. Duplicate Removal</h2>
+<pre class="r"><code>tibble(
+  original_rows = nrow(cpc18_raw),
+  cleaned_rows = nrow(cpc18_cleaned),
+  rows_removed = nrow(cpc18_raw) - nrow(cpc18_cleaned)
+)</code></pre>
 <pre><code>## # A tibble: 1 × 3
-##     rows duplicate_rows duplicate_pct
-##    &lt;int&gt;          &lt;int&gt;         &lt;dbl&gt;
-## 1 694500              0             0</code></pre>
-<p>The raw CPC18 dataset contains no duplicate rows.</p>
-<p>The cleaning process therefore does not remove observations on the
-basis of duplication.</p>
+##   original_rows cleaned_rows rows_removed
+##           &lt;int&gt;        &lt;int&gt;        &lt;int&gt;
+## 1        694500       694500            0</code></pre>
+<p>The exact duplicate check is performed using
+<code>distinct()</code>.</p>
+<p>The profiling stage identified no duplicate rows in the raw CPC18
+dataset, so no observations are expected to be removed by this
+operation.</p>
 </div>
-<div id="logical-validation" class="section level2">
-<h2>5.4 Logical Validation</h2>
-<p>The cleaning process checks:</p>
-<ul>
-<li>participant age;</li>
-<li>probabilities;</li>
-<li>binary choice values;</li>
-<li>ambiguity indicators;</li>
-<li>feedback indicators;</li>
-<li>correlation values;</li>
-<li>trial numbers;</li>
-<li>order positions;</li>
-<li>block values;</li>
-<li>negative reaction times.</li>
-</ul>
-<pre class="r"><code>cpc18_validation_checks &lt;- tibble(
-  check = c(
-    &quot;Invalid age&quot;,
-    &quot;Invalid probabilities&quot;,
-    &quot;Invalid choice&quot;,
-    &quot;Invalid ambiguity&quot;,
-    &quot;Invalid feedback&quot;,
-    &quot;Invalid correlation&quot;,
-    &quot;Invalid trial&quot;,
-    &quot;Invalid order&quot;,
-    &quot;Invalid block&quot;,
-    &quot;Negative reaction time&quot;
-  ),
-  invalid_values = c(
-    cpc18_cleaning_report$invalid_age,
-    cpc18_cleaning_report$invalid_probabilities,
-    cpc18_cleaning_report$invalid_choice,
-    cpc18_cleaning_report$invalid_ambiguity,
-    cpc18_cleaning_report$invalid_feedback,
-    cpc18_cleaning_report$invalid_correlation,
-    cpc18_cleaning_report$invalid_trial,
-    cpc18_cleaning_report$invalid_order,
-    cpc18_cleaning_report$invalid_block,
-    cpc18_cleaning_report$negative_rt
-  )
-)
-
-cpc18_validation_checks</code></pre>
-<pre><code>## # A tibble: 10 × 2
-##    check                  invalid_values
-##    &lt;chr&gt;                           &lt;int&gt;
-##  1 Invalid age                         0
-##  2 Invalid probabilities               0
-##  3 Invalid choice                      0
-##  4 Invalid ambiguity                   0
-##  5 Invalid feedback                    0
-##  6 Invalid correlation                 0
-##  7 Invalid trial                       0
-##  8 Invalid order                       0
-##  9 Invalid block                       0
-## 10 Negative reaction time              0</code></pre>
-<p>These checks allow structurally invalid values to be identified
-before downstream analysis.</p>
+<div id="cleaning-confirmation" class="section level2">
+<h2>8. Cleaning Confirmation</h2>
+<p>The cleaned dataset contains:</p>
+<pre class="r"><code>tibble(
+  rows = nrow(cpc18_cleaned),
+  columns = ncol(cpc18_cleaned),
+  rt_available = sum(cpc18_cleaned$rt_available),
+  rt_unavailable = sum(!cpc18_cleaned$rt_available)
+)</code></pre>
+<pre><code>## # A tibble: 1 × 4
+##     rows columns rt_available rt_unavailable
+##    &lt;int&gt;   &lt;int&gt;        &lt;int&gt;          &lt;int&gt;
+## 1 694500      31       360000         334500</code></pre>
+<p>The cleaned CPC18 dataset retains the original observations while
+adding the standardized analytical variable names and the reaction-time
+availability indicator.</p>
+<p>The raw source file remains unchanged.</p>
 </div>
-</div>
-<div id="cpc18-experimental-structure-validation" class="section level1">
-<h1>6. CPC18 Experimental Structure Validation</h1>
-<p>The dataset contains repeated observations organised around subjects,
-games, and trials.</p>
-<div id="subject-structure" class="section level2">
-<h2>6.1 Subject Structure</h2>
-<pre class="r"><code>cpc18_cleaning_report$subject_structure</code></pre>
-<pre><code>##   subjects min_observations median_observations max_observations
-## 1      926              750                 750              750</code></pre>
-<p>The cleaning validation confirms the observation structure at the
-participant level.</p>
-</div>
-<div id="game-structure" class="section level2">
-<h2>6.2 Game Structure</h2>
-<pre class="r"><code>cpc18_cleaning_report$game_structure</code></pre>
-<pre><code>##   games min_observations median_observations max_observations
-## 1   270             2000                3000             3125</code></pre>
-<p>Game-level observation counts are checked to identify unexpected
-structural inconsistencies.</p>
-</div>
-<div id="reaction-time-by-experimental-set" class="section level2">
-<h2>6.3 Reaction Time by Experimental Set</h2>
-<pre class="r"><code>cpc18_cleaning_report$rt_by_set</code></pre>
-<pre><code>## # A tibble: 9 × 5
-##     set observations rt_available rt_missing rt_available_pct
-##   &lt;int&gt;        &lt;int&gt;        &lt;int&gt;      &lt;int&gt;            &lt;dbl&gt;
-## 1     1        93750            0          1                0
-## 2     2        60750            0          1                0
-## 3     3        60000            0          1                0
-## 4     4        60000            0          1                0
-## 5     5        60000            0          1                0
-## 6     6        90000        90000          0          9000000
-## 7     7        90000        90000          0          9000000
-## 8     8        90000        90000          0          9000000
-## 9     9        90000        90000          0          9000000</code></pre>
-<p>This check is particularly important because reaction time is not
-available for every experimental set.</p>
-<p>The structured missingness will therefore be treated explicitly in
-later reaction-time analysis rather than being treated as ordinary
-missing data.</p>
-</div>
-</div>
-<div id="choices13k-cleaning" class="section level1">
-<h1>7. choices13k Cleaning</h1>
-<div id="type-standardisation-1" class="section level2">
-<h2>7.1 Type Standardisation</h2>
-<p>The choices13k cleaning function standardises identifiers,
-experimental indices, probabilities, lottery characteristics, binary
-variables, and choice-rate variables according to their intended data
-types.</p>
-</div>
-<div id="missing-values-1" class="section level2">
-<h2>7.2 Missing Values</h2>
-<p>The profiling stage showed that choices13k contains no missing
-values.</p>
-<pre class="r"><code>choices13k_cleaning_report$missing_values</code></pre>
-<pre><code>## [1] 0</code></pre>
-<p>No imputation is therefore required during this cleaning stage.</p>
-</div>
-<div id="duplicate-validation-1" class="section level2">
-<h2>7.3 Duplicate Validation</h2>
-<pre class="r"><code>choices13k_cleaning_report$duplicates</code></pre>
-<pre><code>## # A tibble: 1 × 3
-##    rows duplicate_rows duplicate_pct
-##   &lt;int&gt;          &lt;int&gt;         &lt;dbl&gt;
-## 1 14568              0             0</code></pre>
-<p>The dataset contains no duplicate rows.</p>
-</div>
-<div id="logical-validation-1" class="section level2">
-<h2>7.4 Logical Validation</h2>
-<p>The cleaning process checks:</p>
-<ul>
-<li>probability bounds;</li>
-<li>choice-rate bounds;</li>
-<li>standardised choice-rate values;</li>
-<li>correlation values;</li>
-<li>block values;</li>
-<li>valid values of <code>n</code>.</li>
-</ul>
-<pre class="r"><code>choices13k_validation_checks &lt;- tibble(
-  check = c(
-    &quot;Invalid probabilities&quot;,
-    &quot;Invalid choice rates&quot;,
-    &quot;Invalid standardised choice rates&quot;,
-    &quot;Invalid correlation&quot;,
-    &quot;Invalid block&quot;,
-    &quot;Invalid n&quot;
-  ),
-  invalid_values = c(
-    choices13k_cleaning_report$invalid_probabilities,
-    choices13k_cleaning_report$invalid_choice_rates,
-    choices13k_cleaning_report$invalid_standardised_choice_rates,
-    choices13k_cleaning_report$invalid_correlation,
-    choices13k_cleaning_report$invalid_block,
-    choices13k_cleaning_report$invalid_n
-  )
-)
-
-choices13k_validation_checks</code></pre>
-<pre><code>## # A tibble: 6 × 2
-##   check                             invalid_values
-##   &lt;chr&gt;                                      &lt;int&gt;
-## 1 Invalid probabilities                          0
-## 2 Invalid choice rates                           0
-## 3 Invalid standardised choice rates              0
-## 4 Invalid correlation                            0
-## 5 Invalid block                                  0
-## 6 Invalid n                                      0</code></pre>
-</div>
-</div>
-<div id="problem-level-structure" class="section level1">
-<h1>8. Problem-Level Structure</h1>
-<p>The choices13k dataset contains repeated observations for some
-problems.</p>
-<pre class="r"><code>choices13k_cleaning_report$problem_structure</code></pre>
-<pre><code>##   problems min_observations median_observations max_observations
-## 1    13006                1                   1                2</code></pre>
-<p>This structure is retained because repeated observations may be
-analytically meaningful.</p>
-<p>No observations are removed solely because a problem appears more
-than once.</p>
-</div>
-<div id="row-count-integrity" class="section level1">
-<h1>9. Row-Count Integrity</h1>
-<p>A critical requirement of the cleaning process is that the number of
-observations should not change unexpectedly.</p>
-<pre class="r"><code>cleaning_summary</code></pre>
-<pre><code>## # A tibble: 2 × 6
-##   dataset    original_rows cleaned_rows rows_removed missing_values_after_clea…¹
-##   &lt;chr&gt;              &lt;int&gt;        &lt;int&gt;        &lt;int&gt;                       &lt;int&gt;
-## 1 CPC18             694500       694500            0                      334500
-## 2 choices13k         14568        14568            0                           0
-## # ℹ abbreviated name: ¹​missing_values_after_cleaning
-## # ℹ 1 more variable: duplicate_rows_after_cleaning &lt;int&gt;</code></pre>
-<p>The final datasets are compared with their corresponding raw datasets
-using:</p>
-<ul>
-<li>original row count;</li>
-<li>cleaned row count;</li>
-<li>number of rows removed;</li>
-<li>remaining missing values;</li>
-<li>remaining duplicate rows.</li>
-</ul>
-<pre class="r"><code>cleaning_integrity &lt;- tibble(
-  dataset = c(&quot;CPC18&quot;, &quot;choices13k&quot;),
-  original_rows = c(
-    nrow(cpc18_raw),
-    nrow(choices13k_raw)
-  ),
-  cleaned_rows = c(
-    nrow(cpc18_clean),
-    nrow(choices13k_clean)
-  ),
-  rows_removed = c(
-    nrow(cpc18_raw) - nrow(cpc18_clean),
-    nrow(choices13k_raw) - nrow(choices13k_clean)
-  ),
-  duplicates_after_cleaning = c(
-    sum(duplicated(cpc18_clean)),
-    sum(duplicated(choices13k_clean))
-  ),
-  missing_values_after_cleaning = c(
-    sum(is.na(cpc18_clean)),
-    sum(is.na(choices13k_clean))
-  )
-)
-
-cleaning_integrity</code></pre>
-<pre><code>## # A tibble: 2 × 6
-##   dataset    original_rows cleaned_rows rows_removed duplicates_after_cleaning
-##   &lt;chr&gt;              &lt;int&gt;        &lt;int&gt;        &lt;int&gt;                     &lt;int&gt;
-## 1 CPC18             694500       694500            0                         0
-## 2 choices13k         14568        14568            0                         0
-## # ℹ 1 more variable: missing_values_after_cleaning &lt;int&gt;</code></pre>
-</div>
-<div id="cleaning-outcome" class="section level1">
-<h1>10. Cleaning Outcome</h1>
-<p>The cleaning stage produces two processed datasets:</p>
-<ul>
-<li><code>CPC18_clean</code></li>
-<li><code>choices13k_clean</code></li>
-</ul>
-<p>The original raw datasets remain untouched.</p>
-<p>The cleaning process is intentionally conservative. It standardises
-data types and validates structural and logical constraints without
-prematurely deleting observations or altering behavioural variables.</p>
-<p>In particular, CPC18 reaction-time missingness is retained for
-dedicated reaction-time analysis.</p>
-</div>
-<div id="analytical-implications" class="section level1">
-<h1>11. Analytical Implications</h1>
-<p>Several observations from this stage are important for subsequent
-analysis.</p>
-<div id="cpc18" class="section level3">
-<h3>CPC18</h3>
-<p>CPC18 contains repeated observations within participants and games.
-Therefore, later statistical and machine-learning analyses must account
-for the repeated-measures structure where appropriate.</p>
-<p>Reaction time is available only for a subset of the experimental
-data. Consequently, reaction-time analyses will operate on the valid RT
-subset rather than using arbitrary imputation.</p>
-</div>
-<div id="choices13k" class="section level3">
-<h3>choices13k</h3>
-<p>choices13k is a population-level/problem-level dataset with aggregate
-choice-rate variables. It should therefore be analysed according to its
-own structure rather than treated as another individual-level version of
-CPC18.</p>
-<p>The two datasets will remain analytically separate until the later
-cross-dataset comparison stage.</p>
-</div>
-</div>
-<div id="output-files" class="section level1">
-<h1>12. Output Files</h1>
-<p>The cleaning stage writes the processed datasets to:</p>
-<pre class="text"><code>data/processed/CPC18_clean.csv
-data/processed/choices13k_clean.csv</code></pre>
-<p>Validation reports are also stored as RDS objects for
-reproducibility:</p>
-<pre class="text"><code>data/processed/CPC18_cleaning_report.rds
-data/processed/choices13k_cleaning_report.rds
-data/processed/cleaning_summary.rds</code></pre>
-</div>
-<div id="conclusion" class="section level1">
-<h1>13. Conclusion</h1>
-<p>The cleaning stage establishes validated analytical versions of both
-datasets while preserving the original source data and important
-experimental structure.</p>
-<p>The resulting datasets are ready for the next stage: <strong>data
-processing and analytical dataset construction</strong>.</p>
-<div id="further-transformations-derived-variables-and-decision-focused-features-are-intentionally-deferred-to-subsequent-stages." class="section level4">
-<h4>Further transformations, derived variables, and decision-focused
-features are intentionally deferred to subsequent stages.</h4>
-</div>
+<div id="output" class="section level2">
+<h2>9. Output</h2>
+<p>The cleaned dataset is saved as:</p>
+<pre class="text"><code>data/processed/cpc18_cleaned.csv</code></pre>
+<p>Further logical validation, analytical transformations, and feature
+engineering are performed in subsequent stages.</p>
 </div>
 
 

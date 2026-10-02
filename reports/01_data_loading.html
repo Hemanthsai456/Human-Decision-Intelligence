@@ -9,10 +9,9 @@
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
-<meta name="author" content="Hemanth Sai Charagundla" />
 
 
-<title>Stage 01 — Data Loading</title>
+<title>01_data_loading.knit</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -349,40 +348,48 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Stage 01 — Data Loading</h1>
-<h4 class="author">Hemanth Sai Charagundla</h4>
 
 </div>
 
 
+<table>
+<tbody>
+<tr class="odd">
+<td>title: “Stage 01 — Data Loading”</td>
+</tr>
+<tr class="even">
+<td>author: “Hemanth Sai Charagundla”</td>
+</tr>
+<tr class="odd">
+<td>output: html_document</td>
+</tr>
+</tbody>
+</table>
 <div id="purpose" class="section level2">
 <h2>1. Purpose</h2>
-<p>This stage loads the raw CPC18 and choices13k datasets into R without
-modifying the original source files.</p>
-<p>The datasets are loaded as in-memory working objects, and their
-column names are standardized for subsequent analysis.</p>
+<p>This stage loads the raw CPC18 dataset into R without modifying the
+original source file.</p>
+<p>The dataset is loaded as an in-memory working object, and its column
+names are standardized for subsequent analysis.</p>
 </div>
 <div id="load-required-packages" class="section level2">
 <h2>2. Load Required Packages</h2>
 </div>
-<div id="load-datasets" class="section level2">
-<h2>3. Load Datasets</h2>
+<div id="load-dataset" class="section level2">
+<h2>3. Load Dataset</h2>
 <pre class="r"><code>source(&quot;R/01_data_loading.R&quot;)</code></pre>
-<pre><code>## [1] &quot;Raw datasets loaded successfully.&quot;
-## CPC18: 694500 rows x 30 columns
-## choices13k: 14568 rows x 16 columns</code></pre>
+<pre><code>## [1] &quot;Raw dataset loaded successfully.&quot;
+## CPC18: 694500 rows x 30 columns</code></pre>
 </div>
 <div id="loading-confirmation" class="section level2">
 <h2>4. Loading Confirmation</h2>
-<p>The pipeline successfully loaded both raw datasets into memory.</p>
+<p>The CPC18 raw dataset was successfully loaded.</p>
 <ul>
 <li><strong>CPC18:</strong> 694,500 rows × 30 columns</li>
-<li><strong>choices13k:</strong> 14,568 rows × 16 columns</li>
 </ul>
-<div id="the-raw-source-files-are-not-modified.-data-profiling-and-quality-assessment-are-performed-separately-in-stage-02." class="section level4">
-<h4>The raw source files are not modified. Data profiling and quality
-assessment are performed separately in Stage 02.</h4>
-</div>
+<p>The original raw CSV file remains unchanged. Data profiling and
+quality assessment are performed separately in the subsequent
+stages.</p>
 </div>
 
 

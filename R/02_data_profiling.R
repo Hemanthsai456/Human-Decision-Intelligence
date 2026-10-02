@@ -1,13 +1,19 @@
+# ============================================================
+# Human Decision Intelligence
 # 02_data_profiling.R
-# Comprehensive profiling of the raw CPC18 and choices13k datasets.
 #
-# NOTE: This script describes the data as received. It does not clean,
-# transform, filter, impute, or engineer features.
+# Purpose:
+#   Profile the raw CPC18 dataset as received.
+#   This stage does not clean, transform, filter, impute,
+#   or engineer features.
+# ============================================================
 
-# Loading Libraries
+# Packages
 library(dplyr)
 library(purrr)
 library(tibble)
+library(tidyr)
+
 
 # General dataset profiling
 
@@ -24,26 +30,14 @@ profile_dataset <- function(data) {
   
   variables <- tibble(
     variable = names(data),
-    
-    # class() identifies the R class used to represent each variable.
     class = map_chr(data, ~ paste(class(.x), collapse = ", ")),
-    
-    # sum(is.na()) counts observations with missing values.
     missing = map_int(data, ~ sum(is.na(.x))),
-    
-    # mean(is.na()) gives the proportion of missing observations.
     missing_pct = map_dbl(data, ~ mean(is.na(.x)) * 100),
-    
-    # n_distinct() counts different observed values in each variable.
     unique_values = map_int(data, ~ n_distinct(.x, na.rm = TRUE))
   )
   
-  numeric_data <- data %>%
-    # where() selects columns according to their data type.
-    select(where(is.numeric))
-  
-  numeric_summary <- numeric_data %>%
-    # across() applies the same summary functions to every numeric column.
+  numeric_summary <- data %>%
+    select(where(is.numeric)) %>%
     summarise(across(
       everything(),
       list(
@@ -53,24 +47,24 @@ profile_dataset <- function(data) {
         median = ~ median(.x, na.rm = TRUE),
         max = ~ max(.x, na.rm = TRUE)
       )
-    ))
+    )) %>%
+    pivot_longer(
+      everything(),
+      names_to = c("variable", "statistic"),
+      names_pattern = "^(.*)_(mean|sd|min|median|max)$",
+      values_to = "value"
+    )
   
   categorical_data <- data %>%
-    # Character and factor variables are treated as categorical variables here.
     select(where(~ is.character(.x) || is.factor(.x)))
   
   categorical_summary <- map_dfr(
     names(categorical_data),
     function(variable) {
       
-      counts <- categorical_data %>%
-        # count() gives the frequency of each observed category.
-        count(.data[[variable]], sort = TRUE, name = "frequency")
-      
-      names(counts)[1] <- "level"
-      
-      counts %>%
-        # Add the original variable name so results from all variables can be combined.
+      categorical_data %>%
+        count(.data[[variable]], sort = TRUE, name = "frequency") %>%
+        rename(level = 1) %>%
         mutate(variable = variable, .before = 1)
     }
   )
@@ -83,6 +77,7 @@ profile_dataset <- function(data) {
   )
 }
 
+
 # CPC18-specific profiling
 
 profile_cpc18 <- function(data) {
@@ -90,27 +85,30 @@ profile_cpc18 <- function(data) {
   profile <- profile_dataset(data)
   
   profile$cpc18 <- list(
+    
     subjects = n_distinct(data$subj_id),
     games = n_distinct(data$game_id),
     sets = sort(unique(data$set)),
     trials = sort(unique(data$trial)),
     orders = sort(unique(data$order)),
     
-    # count() gives the number of observations for each recorded choice.
     choices = count(data, b, name = "observations"),
-    
-    # count() shows the distribution of feedback conditions.
     feedback = count(data, feedback, name = "observations"),
-    
-    # count() shows the distribution of ambiguous and non-ambiguous trials.
     ambiguity = count(data, amb, name = "observations"),
+    correlation = count(data, corr, name = "observations"),
     
-    # count() shows the distribution of payoff correlation conditions.
-    correlation = count(data, corr, name = "observations")
+    location = count(data, location, name = "observations"),
+    gender = count(data, gender, name = "observations"),
+    condition = count(data, condition, name = "observations"),
+    button = count(data, button, name = "observations"),
+    lottery_shape_a = count(data, lot_shape_a, name = "observations"),
+    lottery_shape_b = count(data, lot_shape_b, name = "observations")
   )
   
-  # NOTE: RT has structured availability in CPC18, so its missingness
-  # is profiled separately rather than treated as ordinary missing data.
+  
+  # Reaction-time availability
+  # RT is structurally available only for specific CPC18 sets.
+  
   profile$cpc18$reaction_time <- tibble(
     total = nrow(data),
     available = sum(!is.na(data$rt)),
@@ -129,7 +127,9 @@ profile_cpc18 <- function(data) {
       .groups = "drop"
     )
   
-  # count() checks how many observations each subject contributes.
+  
+  # Subject-level observation structure
+  
   subject_observations <- data %>%
     count(subj_id, name = "observations")
   
@@ -141,7 +141,9 @@ profile_cpc18 <- function(data) {
       max = max(observations)
     )
   
-  # count() checks the number of observations recorded for each game.
+  
+  # Game-level observation structure
+  
   game_observations <- data %>%
     count(game_id, name = "observations")
   
@@ -152,54 +154,11 @@ profile_cpc18 <- function(data) {
       median = median(observations),
       max = max(observations)
     )
-  
-  profile
-}
-
-
-# choices13k-specific profiling
-
-profile_choices13k <- function(data) {
-  
-  profile <- profile_dataset(data)
-  
-  profile$choices13k <- list(
-    problems = n_distinct(data$problem),
-    
-    # count() shows the distribution of feedback conditions.
-    feedback = count(data, feedback, name = "observations"),
-    
-    # count() shows how observations are distributed across blocks.
-    blocks = count(data, block, name = "observations"),
-    
-    # count() shows the distribution of ambiguous and non-ambiguous problems.
-    ambiguity = count(data, amb, name = "observations"),
-    
-    # count() shows the distribution of payoff correlation conditions.
-    correlation = count(data, corr, name = "observations")
-  )
-  
-  # count() shows how frequently each problem occurs in the dataset.
-  problem_observations <- data %>%
-    count(problem, name = "observations")
-  
-  profile$choices13k$problem_observations <- problem_observations %>%
-    summarise(
-      problems = n(),
-      min = min(observations),
-      median = median(observations),
-      max = max(observations)
-    )
-  
-  profile$choices13k$b_rate <- summary(data$b_rate)
-  profile$choices13k$b_rate_std <- summary(data$b_rate_std)
-  
   profile
 }
 
 
 # CPC18 Profiling
-profile_cpc18(cpc18_raw)
+cpc18_profile <- profile_cpc18(cpc18_raw)
 
-# Choices 13k profiling
-profile_choices13k(choices13k_raw)
+cpc18_profile

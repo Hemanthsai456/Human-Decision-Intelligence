@@ -1,0 +1,142 @@
+---
+title: "Stage 04 — Data Validation"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---------------------
+
+## 1. Purpose
+
+This stage validates the logical consistency of the cleaned CPC18 analytical dataset.
+
+The validation checks categorical values, binary coding, numeric ranges, trial and time-block consistency, payoff relationships, and reaction-time validity.
+
+Validation does not modify or remove observations. Any detected anomalies are reported through the validation results.
+
+## 2. Prerequisites and Execution Order
+
+Stage 04 depends on the cleaned CPC18 dataset produced by `R/03_data_cleaning.R`.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — loads the raw CPC18 dataset.
+2. `R/03_data_cleaning.R` — creates and saves the cleaned CPC18 dataset.
+3. `R/04_data_validation.R` — validates the cleaned CPC18 dataset and generates validation results.
+
+## 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+
+library(dplyr)
+```
+
+## 4. Load and Validate Dataset
+
+```{r validation, message=FALSE, warning=FALSE}
+source("R/04_data_validation.R")
+```
+
+The validation script loads:
+
+`data/processed/cpc18_cleaned.csv`
+
+and produces the validation results table:
+
+`validation_results`.
+
+## 5. Validation Checks
+
+### 5.1 Categorical Values
+
+The following categorical variables are checked against their expected CPC18 values:
+
+* `location`
+* `gender`
+* `condition`
+* `lottery_shape_a`
+* `lottery_shape_b`
+* `selected_button`
+
+### 5.2 Binary Variables
+
+The following variables are validated to contain only their expected binary coding:
+
+* `ambiguous_b`
+* `chose_b`
+* `full_feedback`
+
+### 5.3 Numeric Ranges
+
+The following numerical constraints are validated:
+
+* `probability_a` and `probability_b` must be between 0 and 1.
+* `payoff_correlation` must be `-1`, `0`, or `1`.
+* `game_order` must be between 1 and 30.
+* `trial_number` must be between 1 and 25.
+* `time_block` must be between 1 and 5.
+
+### 5.4 Trial and Block Consistency
+
+The time-block assignment is checked against the trial number using the five-trial block structure.
+
+### 5.5 Payoff Consistency
+
+The validation checks whether:
+
+* `realized_payoff` corresponds to the selected option.
+* `forgone_payoff` corresponds to the option not selected.
+
+### 5.6 Reaction-Time Validation
+
+Recorded reaction times are checked for negative values.
+
+The `rt_available` indicator is also checked against the presence or absence of `reaction_time_ms`.
+
+Missing reaction times are not treated as invalid observations.
+
+## 6. Validation Results
+
+```{r validation-results}
+validation_results
+```
+
+The validation results contain:
+
+* `check` — validation rule that was evaluated.
+* `invalid_rows` — number of observations that failed the check.
+* `status` — `PASS` when no invalid observations were detected and `FLAG` when observations require attention.
+
+## 7. Validation Summary
+
+```{r validation-summary}
+validation_results %>%
+  count(status)
+```
+
+The complete validation output is saved to:
+
+`data/processed/cpc18_validation_results.csv`
+
+## 8. Interpretation
+
+The validation stage provides a logical quality check before downstream analysis and feature construction.
+
+A `PASS` indicates that no observations violated the corresponding validation rule.
+
+The validation process does not automatically remove flagged observations. Any anomaly identified at this stage must be investigated and its treatment documented before subsequent analysis.
+
+## 9. Output
+
+The cleaned analytical dataset remains:
+
+`data/processed/cpc18_cleaned.csv`
+
+Validation results are stored separately as:
+
+`data/processed/cpc18_validation_results.csv`
+
+The raw CPC18 source data remains unchanged.
+
+## 10. Next Stage
+
+After data validation, the project proceeds to the next analytical stage using the validated CPC18 dataset.

@@ -2,15 +2,26 @@
 title: "Stage 02 — Data Profiling"
 author: "Hemanth Sai Charagundla"
 output: html_document
----
+---------------------
 
 ## 1. Purpose
 
-This stage performs comprehensive profiling of the raw CPC18 and choices13k datasets.
+This stage performs comprehensive profiling of the raw CPC18 dataset.
 
-The profiling describes the structure, variables, missing values, duplicates, numeric variables, categorical variables, and dataset-specific characteristics without modifying the raw data.
+The profiling describes the dataset structure, variables, missing values, duplicates, numeric and categorical variables, and CPC18-specific characteristics without modifying the raw data.
 
-## 2. Load Required Packages
+## 2. Execution Order
+
+The profiling stage is executed after data loading.
+
+```text
+01_data_loading.R
+02_data_profiling.R
+```
+
+The raw CPC18 dataset is loaded first and then passed to the profiling functions.
+
+## 3. Load Required Packages
 
 ```{r setup, include=FALSE}
 knitr::opts_knit$set(root.dir = "..")
@@ -18,109 +29,73 @@ knitr::opts_knit$set(root.dir = "..")
 library(dplyr)
 library(purrr)
 library(tibble)
+library(tidyr)
 ```
 
-## 3. Load Data and Run Profiling
+## 4. Load Data and Run Profiling
 
 ```{r profiling, message=FALSE, warning=FALSE}
 source("R/01_data_loading.R")
 source("R/02_data_profiling.R")
 
 cpc18_profile <- profile_cpc18(cpc18_raw)
-choices13k_profile <- profile_choices13k(choices13k_raw)
 ```
 
-## 4. Dataset Overview
+## 5. Dataset Overview
 
-### CPC18
+The dataset overview summarizes the number of rows, columns, total cells, missing values, complete rows, and duplicate rows.
 
 ```{r cpc18-overview}
 cpc18_profile$overview
 ```
 
-### choices13k
+## 6. Variable Profile
 
-```{r choices13k-overview}
-choices13k_profile$overview
-```
-
-## 5. Variable Profile
-
-The variable profile records the data class, missing values, missing-value percentage, and number of unique observed values for each variable.
-
-### CPC18
+The variable profile records the R class, missing values, missing-value percentage, and number of unique observed values for each variable.
 
 ```{r cpc18-variables}
 cpc18_profile$variables
 ```
 
-### choices13k
+## 7. Missing Values
 
-```{r choices13k-variables}
-choices13k_profile$variables
-```
-
-## 6. Missing Values
-
-### CPC18
+Variables containing missing values are identified without applying any imputation or removal.
 
 ```{r cpc18-missing}
 cpc18_profile$variables %>%
   filter(missing > 0)
 ```
 
-### choices13k
-
-```{r choices13k-missing}
-choices13k_profile$variables %>%
-  filter(missing > 0)
-```
-
 The missing-value pattern is retained as observed at this stage. No imputation or removal is performed during profiling.
 
-## 7. Duplicate Rows
+## 8. Duplicate Rows
 
 The duplicate-row count is included in the dataset overview.
 
 ```{r duplicates}
 tibble(
-  dataset = c("CPC18", "choices13k"),
-  duplicate_rows = c(
-    cpc18_profile$overview$duplicate_rows,
-    choices13k_profile$overview$duplicate_rows
-  )
+  dataset = "CPC18",
+  duplicate_rows = cpc18_profile$overview$duplicate_rows
 )
 ```
 
-## 8. Numeric Variable Summary
+## 9. Numeric Variable Summary
 
-### CPC18
+The numeric profile provides the mean, standard deviation, minimum, median, and maximum for numeric variables.
 
 ```{r cpc18-numeric}
 cpc18_profile$numeric_summary
 ```
 
-### choices13k
+## 10. Categorical Variable Summary
 
-```{r choices13k-numeric}
-choices13k_profile$numeric_summary
-```
-
-## 9. Categorical Variable Summary
-
-### CPC18
+The categorical profile shows the observed levels and their frequencies for character and factor variables.
 
 ```{r cpc18-categorical}
 cpc18_profile$categorical_summary
 ```
 
-### choices13k
-
-```{r choices13k-categorical}
-choices13k_profile$categorical_summary
-```
-
-## 10. CPC18-Specific Profile
+## 11. CPC18-Specific Profile
 
 ### Subjects, Games, Sets, Trials and Orders
 
@@ -158,6 +133,42 @@ cpc18_profile$cpc18$ambiguity
 cpc18_profile$cpc18$correlation
 ```
 
+### Location Distribution
+
+```{r cpc18-location}
+cpc18_profile$cpc18$location
+```
+
+### Gender Distribution
+
+```{r cpc18-gender}
+cpc18_profile$cpc18$gender
+```
+
+### Condition Distribution
+
+```{r cpc18-condition}
+cpc18_profile$cpc18$condition
+```
+
+### Button Distribution
+
+```{r cpc18-button}
+cpc18_profile$cpc18$button
+```
+
+### Lottery Shape — Option A
+
+```{r cpc18-lottery-a}
+cpc18_profile$cpc18$lottery_shape_a
+```
+
+### Lottery Shape — Option B
+
+```{r cpc18-lottery-b}
+cpc18_profile$cpc18$lottery_shape_b
+```
+
 ### Reaction-Time Availability
 
 ```{r cpc18-rt}
@@ -184,58 +195,8 @@ cpc18_profile$cpc18$subject_observations
 cpc18_profile$cpc18$game_observations
 ```
 
-## 11. choices13k-Specific Profile
-
-### Number of Problems
-
-```{r choices13k-problems}
-choices13k_profile$choices13k$problems
-```
-
-### Feedback Distribution
-
-```{r choices13k-feedback}
-choices13k_profile$choices13k$feedback
-```
-
-### Block Distribution
-
-```{r choices13k-blocks}
-choices13k_profile$choices13k$blocks
-```
-
-### Ambiguity Distribution
-
-```{r choices13k-ambiguity}
-choices13k_profile$choices13k$ambiguity
-```
-
-### Correlation Distribution
-
-```{r choices13k-correlation}
-choices13k_profile$choices13k$correlation
-```
-
-### Problem-Level Observations
-
-```{r choices13k-problem-observations}
-choices13k_profile$choices13k$problem_observations
-```
-
-### bRate
-
-```{r choices13k-brate}
-choices13k_profile$choices13k$b_rate
-```
-
-### Standardized bRate
-
-```{r choices13k-brate-std}
-choices13k_profile$choices13k$b_rate_std
-```
-
 ## 12. Profiling Summary
 
-The profiling stage establishes the structure and characteristics of both raw datasets before any cleaning or transformation is performed.
+The profiling stage establishes the structure and characteristics of the raw CPC18 dataset before any cleaning, validation, transformation, or feature engineering is performed.
 
-#### The results from this stage will be used to guide the data-cleaning, validation, and analytical dataset construction stages.
+The results from this stage will guide the subsequent data-quality and validation stage.

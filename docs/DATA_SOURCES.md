@@ -1,6 +1,6 @@
 # Data Sources
 
-This project uses two publicly available datasets related to Human Decision Intelligence.
+This project uses one publicly available dataset related to human decision-making under uncertainty.
 
 ## 1. CPC18 — Choice Prediction Competition 2018
 
@@ -26,31 +26,12 @@ https://doi.org/10.5281/zenodo.2571510
 
 ---
 
-## 2. choices13k
+## Dataset Role in This Project
 
-**Dataset:** choices13k
+### CPC18
 
-**Repository:**
-https://github.com/jcpeterson/choices13k
+CPC18 is the primary and only dataset used in this project. It contains repeated human choices across decision problems involving lotteries, expected values, probabilities, payoffs, ambiguity, correlation, feedback, trial position, and other experimental conditions.
 
-### Associated Research Citation
+The dataset is used to study how decision-problem characteristics relate to human choices, identify individual behavioural patterns, analyze reaction time where available, develop predictive models of Option B selection, and explain model predictions.
 
-Peterson, J. C., Bourgin, D. D., Agrawal, M., Reichman, D., & Griffiths, T. L. (2021).
-
-*Using large-scale experiments and machine learning to discover theories of human decision-making.*
-
-*Science, 372*(6547), 1209–1214.
-
-https://doi.org/10.1126/science.abe2629
-
----
-
-## Dataset Roles in This Project
-
-### CPC18 — Primary Dataset
-
-CPC18 is the primary individual-level behavioural dataset used to study repeated human choices across decision problems involving risk, ambiguity, feedback, lottery characteristics, and related experimental conditions.
-
-### choices13k — Secondary Dataset
-
-choices13k is used as a complementary population-level dataset. It is analysed separately from CPC18 and is used for cross-dataset comparison rather than direct row-level merging.
+Raw CPC18 data are preserved unchanged. All cleaning, transformation, feature engineering, analysis, modelling, and visualization are performed through reproducible R code.
