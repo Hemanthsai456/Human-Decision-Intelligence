@@ -42,6 +42,7 @@ renv/sandbox/
 # Data
 data/raw/*.csv
 data/processed/*.csv
+data/processed/*.rds
 
 # Secrets
 .env

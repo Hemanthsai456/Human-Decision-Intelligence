@@ -1,0 +1,241 @@
+---
+title: "Stage 02 — Data Profiling"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+## 1. Purpose
+
+This stage performs comprehensive profiling of the raw CPC18 and choices13k datasets.
+
+The profiling describes the structure, variables, missing values, duplicates, numeric variables, categorical variables, and dataset-specific characteristics without modifying the raw data.
+
+## 2. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+
+library(dplyr)
+library(purrr)
+library(tibble)
+```
+
+## 3. Load Data and Run Profiling
+
+```{r profiling, message=FALSE, warning=FALSE}
+source("R/01_data_loading.R")
+source("R/02_data_profiling.R")
+
+cpc18_profile <- profile_cpc18(cpc18_raw)
+choices13k_profile <- profile_choices13k(choices13k_raw)
+```
+
+## 4. Dataset Overview
+
+### CPC18
+
+```{r cpc18-overview}
+cpc18_profile$overview
+```
+
+### choices13k
+
+```{r choices13k-overview}
+choices13k_profile$overview
+```
+
+## 5. Variable Profile
+
+The variable profile records the data class, missing values, missing-value percentage, and number of unique observed values for each variable.
+
+### CPC18
+
+```{r cpc18-variables}
+cpc18_profile$variables
+```
+
+### choices13k
+
+```{r choices13k-variables}
+choices13k_profile$variables
+```
+
+## 6. Missing Values
+
+### CPC18
+
+```{r cpc18-missing}
+cpc18_profile$variables %>%
+  filter(missing > 0)
+```
+
+### choices13k
+
+```{r choices13k-missing}
+choices13k_profile$variables %>%
+  filter(missing > 0)
+```
+
+The missing-value pattern is retained as observed at this stage. No imputation or removal is performed during profiling.
+
+## 7. Duplicate Rows
+
+The duplicate-row count is included in the dataset overview.
+
+```{r duplicates}
+tibble(
+  dataset = c("CPC18", "choices13k"),
+  duplicate_rows = c(
+    cpc18_profile$overview$duplicate_rows,
+    choices13k_profile$overview$duplicate_rows
+  )
+)
+```
+
+## 8. Numeric Variable Summary
+
+### CPC18
+
+```{r cpc18-numeric}
+cpc18_profile$numeric_summary
+```
+
+### choices13k
+
+```{r choices13k-numeric}
+choices13k_profile$numeric_summary
+```
+
+## 9. Categorical Variable Summary
+
+### CPC18
+
+```{r cpc18-categorical}
+cpc18_profile$categorical_summary
+```
+
+### choices13k
+
+```{r choices13k-categorical}
+choices13k_profile$categorical_summary
+```
+
+## 10. CPC18-Specific Profile
+
+### Subjects, Games, Sets, Trials and Orders
+
+```{r cpc18-structure}
+list(
+  subjects = cpc18_profile$cpc18$subjects,
+  games = cpc18_profile$cpc18$games,
+  sets = cpc18_profile$cpc18$sets,
+  trials = cpc18_profile$cpc18$trials,
+  orders = cpc18_profile$cpc18$orders
+)
+```
+
+### Choice Distribution
+
+```{r cpc18-choice}
+cpc18_profile$cpc18$choices
+```
+
+### Feedback Distribution
+
+```{r cpc18-feedback}
+cpc18_profile$cpc18$feedback
+```
+
+### Ambiguity Distribution
+
+```{r cpc18-ambiguity}
+cpc18_profile$cpc18$ambiguity
+```
+
+### Correlation Distribution
+
+```{r cpc18-correlation}
+cpc18_profile$cpc18$correlation
+```
+
+### Reaction-Time Availability
+
+```{r cpc18-rt}
+cpc18_profile$cpc18$reaction_time
+```
+
+Reaction time is profiled separately because its availability is structured within CPC18. It is not treated as an ordinary missing-value field at this stage.
+
+### Reaction-Time Availability by Set
+
+```{r cpc18-rt-set}
+cpc18_profile$cpc18$reaction_time_by_set
+```
+
+### Subject-Level Observations
+
+```{r cpc18-subject-observations}
+cpc18_profile$cpc18$subject_observations
+```
+
+### Game-Level Observations
+
+```{r cpc18-game-observations}
+cpc18_profile$cpc18$game_observations
+```
+
+## 11. choices13k-Specific Profile
+
+### Number of Problems
+
+```{r choices13k-problems}
+choices13k_profile$choices13k$problems
+```
+
+### Feedback Distribution
+
+```{r choices13k-feedback}
+choices13k_profile$choices13k$feedback
+```
+
+### Block Distribution
+
+```{r choices13k-blocks}
+choices13k_profile$choices13k$blocks
+```
+
+### Ambiguity Distribution
+
+```{r choices13k-ambiguity}
+choices13k_profile$choices13k$ambiguity
+```
+
+### Correlation Distribution
+
+```{r choices13k-correlation}
+choices13k_profile$choices13k$correlation
+```
+
+### Problem-Level Observations
+
+```{r choices13k-problem-observations}
+choices13k_profile$choices13k$problem_observations
+```
+
+### bRate
+
+```{r choices13k-brate}
+choices13k_profile$choices13k$b_rate
+```
+
+### Standardized bRate
+
+```{r choices13k-brate-std}
+choices13k_profile$choices13k$b_rate_std
+```
+
+## 12. Profiling Summary
+
+The profiling stage establishes the structure and characteristics of both raw datasets before any cleaning or transformation is performed.
+
+#### The results from this stage will be used to guide the data-cleaning, validation, and analytical dataset construction stages.

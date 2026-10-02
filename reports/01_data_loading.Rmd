@@ -1,0 +1,36 @@
+---
+title: "Stage 01 — Data Loading"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+## 1. Purpose
+
+This stage loads the raw CPC18 and choices13k datasets into R without modifying the original source files.
+
+The datasets are loaded as in-memory working objects, and their column names are standardized for subsequent analysis.
+
+## 2. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+
+library(tidyverse)
+library(data.table)
+library(janitor)
+```
+
+## 3. Load Datasets
+
+```{r data-loading, message=FALSE, warning=FALSE}
+source("R/01_data_loading.R")
+```
+
+## 4. Loading Confirmation
+
+The pipeline successfully loaded both raw datasets into memory.
+
+- **CPC18:** 694,500 rows × 30 columns
+- **choices13k:** 14,568 rows × 16 columns
+
+#### The raw source files are not modified. Data profiling and quality assessment are performed separately in Stage 02.

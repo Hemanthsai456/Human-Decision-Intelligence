@@ -1,0 +1,371 @@
+---
+title: "Stage 03 — Data Cleaning and Validation"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+# 1. Objective
+
+The objective of this stage is to construct validated analytical versions of the CPC18 and choices13k datasets while preserving the original raw data.
+
+# 2. Prerequisites and Execution Order
+
+Stage 03 depends on the raw datasets loaded by `R/01_data_loading.R`.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — loads and standardises the raw datasets in memory.
+2. `R/03_data_cleaning.R` — validates, cleans, and saves the processed datasets and validation reports.
+3. `reports/03_data_cleaning.Rmd` — documents the cleaning and validation results.
+
+`R/02_data_profiling.R` is a separate profiling stage and does not need to be executed as a prerequisite for the cleaning script itself.
+
+The Stage 03 report is located inside the `reports/` directory, so the project root is explicitly set as the working directory before the pipeline scripts are sourced.
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(tibble)
+```
+
+The following pipeline scripts are required for this report:
+
+```{r run-cleaning, message=FALSE, warning=FALSE}
+source("R/01_data_loading.R")
+source("R/03_data_cleaning.R")
+```
+
+`R/01_data_loading.R` must run first because `R/03_data_cleaning.R` expects the objects `cpc18_raw` and `choices13k_raw` to already exist in memory.
+
+The cleaning script then creates:
+
+- `cpc18_clean`
+- `choices13k_clean`
+- `cpc18_cleaning_report`
+- `choices13k_cleaning_report`
+- `cleaning_summary`
+
+and writes the processed datasets and validation reports to `data/processed/`.
+
+# 3. Cleaning Principles
+
+The cleaning stage follows several principles.
+
+1. **Raw data preservation**  
+   Original source files remain unchanged.
+
+2. **No unnecessary row removal**  
+   Observations are not removed merely because values are unusual.
+
+3. **Missingness is preserved unless a justified transformation is required**  
+   In particular, missing reaction-time values in CPC18 are retained because reaction time was not collected for all experimental sets.
+
+4. **Schema validation precedes transformation**  
+   Expected variables are checked before the cleaning process is applied.
+
+5. **Logical validation is separated from analytical decisions**  
+   A value that is unusual is not automatically treated as erroneous.
+
+6. **Row-count integrity is explicitly checked**  
+   Cleaning should not silently remove observations.
+
+# 4. Dataset Schema Validation
+
+The cleaning script defines expected schemas for both datasets.
+
+For CPC18, the expected variables include participant identifiers, experimental conditions, lottery characteristics, choices, payoffs, reaction time, feedback, and trial structure.
+
+For choices13k, the expected variables include problem characteristics, feedback, block information, lottery characteristics, ambiguity, correlation, and aggregate choice-rate measures.
+
+The function `validate_columns()` checks whether all required variables are present before cleaning proceeds.
+
+# 5. CPC18 Cleaning
+
+## 5.1 Type Standardisation
+
+The CPC18 cleaning function standardises variables according to their semantic roles.
+
+Identifiers and experimental indices are stored as integers, probabilities and numerical outcome variables as numeric, binary experimental variables as integer indicators, and reaction time as numeric.
+
+Reaction-time availability is calculated from the original reaction-time field and recorded in the cleaning validation report.
+
+```{r cpc18-type-validation}
+cpc18_cleaning_report$rt_by_set
+```
+
+## 5.2 Missing Values
+
+The CPC18 profiling stage identified missing values only in the reaction-time variable.
+
+```{r cpc18-missing}
+tibble(
+  total_observations = nrow(cpc18_clean),
+  rt_available = sum(!is.na(cpc18_clean$rt)),
+  rt_missing = sum(is.na(cpc18_clean$rt)),
+  rt_available_pct = mean(!is.na(cpc18_clean$rt)) * 100,
+  rt_missing_pct = mean(is.na(cpc18_clean$rt)) * 100
+)
+```
+
+The observed reaction-time pattern is structured by experimental set rather than randomly distributed across the dataset.
+
+Therefore, reaction-time missingness is preserved rather than imputed during this stage.
+
+## 5.3 Duplicate Validation
+
+```{r cpc18-duplicates}
+cpc18_cleaning_report$duplicates
+```
+
+The raw CPC18 dataset contains no duplicate rows.
+
+The cleaning process therefore does not remove observations on the basis of duplication.
+
+## 5.4 Logical Validation
+
+The cleaning process checks:
+
+- participant age;
+- probabilities;
+- binary choice values;
+- ambiguity indicators;
+- feedback indicators;
+- correlation values;
+- trial numbers;
+- order positions;
+- block values;
+- negative reaction times.
+
+```{r cpc18-validation}
+cpc18_validation_checks <- tibble(
+  check = c(
+    "Invalid age",
+    "Invalid probabilities",
+    "Invalid choice",
+    "Invalid ambiguity",
+    "Invalid feedback",
+    "Invalid correlation",
+    "Invalid trial",
+    "Invalid order",
+    "Invalid block",
+    "Negative reaction time"
+  ),
+  invalid_values = c(
+    cpc18_cleaning_report$invalid_age,
+    cpc18_cleaning_report$invalid_probabilities,
+    cpc18_cleaning_report$invalid_choice,
+    cpc18_cleaning_report$invalid_ambiguity,
+    cpc18_cleaning_report$invalid_feedback,
+    cpc18_cleaning_report$invalid_correlation,
+    cpc18_cleaning_report$invalid_trial,
+    cpc18_cleaning_report$invalid_order,
+    cpc18_cleaning_report$invalid_block,
+    cpc18_cleaning_report$negative_rt
+  )
+)
+
+cpc18_validation_checks
+```
+
+These checks allow structurally invalid values to be identified before downstream analysis.
+
+# 6. CPC18 Experimental Structure Validation
+
+The dataset contains repeated observations organised around subjects, games, and trials.
+
+## 6.1 Subject Structure
+
+```{r cpc18-subject}
+cpc18_cleaning_report$subject_structure
+```
+
+The cleaning validation confirms the observation structure at the participant level.
+
+## 6.2 Game Structure
+
+```{r cpc18-game}
+cpc18_cleaning_report$game_structure
+```
+
+Game-level observation counts are checked to identify unexpected structural inconsistencies.
+
+## 6.3 Reaction Time by Experimental Set
+
+```{r cpc18-rt-structure}
+cpc18_cleaning_report$rt_by_set
+```
+
+This check is particularly important because reaction time is not available for every experimental set.
+
+The structured missingness will therefore be treated explicitly in later reaction-time analysis rather than being treated as ordinary missing data.
+
+# 7. choices13k Cleaning
+
+## 7.1 Type Standardisation
+
+The choices13k cleaning function standardises identifiers, experimental indices, probabilities, lottery characteristics, binary variables, and choice-rate variables according to their intended data types.
+
+## 7.2 Missing Values
+
+The profiling stage showed that choices13k contains no missing values.
+
+```{r choices13k-missing}
+choices13k_cleaning_report$missing_values
+```
+
+No imputation is therefore required during this cleaning stage.
+
+## 7.3 Duplicate Validation
+
+```{r choices13k-duplicates}
+choices13k_cleaning_report$duplicates
+```
+
+The dataset contains no duplicate rows.
+
+## 7.4 Logical Validation
+
+The cleaning process checks:
+
+- probability bounds;
+- choice-rate bounds;
+- standardised choice-rate values;
+- correlation values;
+- block values;
+- valid values of `n`.
+
+```{r choices13k-validation}
+choices13k_validation_checks <- tibble(
+  check = c(
+    "Invalid probabilities",
+    "Invalid choice rates",
+    "Invalid standardised choice rates",
+    "Invalid correlation",
+    "Invalid block",
+    "Invalid n"
+  ),
+  invalid_values = c(
+    choices13k_cleaning_report$invalid_probabilities,
+    choices13k_cleaning_report$invalid_choice_rates,
+    choices13k_cleaning_report$invalid_standardised_choice_rates,
+    choices13k_cleaning_report$invalid_correlation,
+    choices13k_cleaning_report$invalid_block,
+    choices13k_cleaning_report$invalid_n
+  )
+)
+
+choices13k_validation_checks
+```
+
+# 8. Problem-Level Structure
+
+The choices13k dataset contains repeated observations for some problems.
+
+```{r choices13k-problems}
+choices13k_cleaning_report$problem_structure
+```
+
+This structure is retained because repeated observations may be analytically meaningful.
+
+No observations are removed solely because a problem appears more than once.
+
+# 9. Row-Count Integrity
+
+A critical requirement of the cleaning process is that the number of observations should not change unexpectedly.
+
+```{r cleaning-summary}
+cleaning_summary
+```
+
+The final datasets are compared with their corresponding raw datasets using:
+
+- original row count;
+- cleaned row count;
+- number of rows removed;
+- remaining missing values;
+- remaining duplicate rows.
+
+```{r cleaning-integrity}
+cleaning_integrity <- tibble(
+  dataset = c("CPC18", "choices13k"),
+  original_rows = c(
+    nrow(cpc18_raw),
+    nrow(choices13k_raw)
+  ),
+  cleaned_rows = c(
+    nrow(cpc18_clean),
+    nrow(choices13k_clean)
+  ),
+  rows_removed = c(
+    nrow(cpc18_raw) - nrow(cpc18_clean),
+    nrow(choices13k_raw) - nrow(choices13k_clean)
+  ),
+  duplicates_after_cleaning = c(
+    sum(duplicated(cpc18_clean)),
+    sum(duplicated(choices13k_clean))
+  ),
+  missing_values_after_cleaning = c(
+    sum(is.na(cpc18_clean)),
+    sum(is.na(choices13k_clean))
+  )
+)
+
+cleaning_integrity
+```
+
+# 10. Cleaning Outcome
+
+The cleaning stage produces two processed datasets:
+
+- `CPC18_clean`
+- `choices13k_clean`
+
+The original raw datasets remain untouched.
+
+The cleaning process is intentionally conservative. It standardises data types and validates structural and logical constraints without prematurely deleting observations or altering behavioural variables.
+
+In particular, CPC18 reaction-time missingness is retained for dedicated reaction-time analysis.
+
+# 11. Analytical Implications
+
+Several observations from this stage are important for subsequent analysis.
+
+### CPC18
+
+CPC18 contains repeated observations within participants and games. Therefore, later statistical and machine-learning analyses must account for the repeated-measures structure where appropriate.
+
+Reaction time is available only for a subset of the experimental data. Consequently, reaction-time analyses will operate on the valid RT subset rather than using arbitrary imputation.
+
+### choices13k
+
+choices13k is a population-level/problem-level dataset with aggregate choice-rate variables. It should therefore be analysed according to its own structure rather than treated as another individual-level version of CPC18.
+
+The two datasets will remain analytically separate until the later cross-dataset comparison stage.
+
+# 12. Output Files
+
+The cleaning stage writes the processed datasets to:
+
+```text
+data/processed/CPC18_clean.csv
+data/processed/choices13k_clean.csv
+```
+
+Validation reports are also stored as RDS objects for reproducibility:
+
+```text
+data/processed/CPC18_cleaning_report.rds
+data/processed/choices13k_cleaning_report.rds
+data/processed/cleaning_summary.rds
+```
+
+# 13. Conclusion
+
+The cleaning stage establishes validated analytical versions of both datasets while preserving the original source data and important experimental structure.
+
+The resulting datasets are ready for the next stage: **data processing and analytical dataset construction**.
+
+#### Further transformations, derived variables, and decision-focused features are intentionally deferred to subsequent stages.
