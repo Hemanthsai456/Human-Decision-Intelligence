@@ -1,0 +1,120 @@
+---
+title: "Stage 10 — ML Data Preparation"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+# 1. Purpose
+
+This stage prepares the CPC18 data for supervised choice prediction.
+
+It creates subject-grouped training, validation, and test sets, defines the pre-decision predictors, checks that no post-decision information is used, and saves the cleaned datasets for the modelling scripts.
+
+The goal is to estimate how well choices can be predicted for participants the model has never seen.
+
+# 2. Prerequisites and Execution Order
+
+Stage 10 depends on the feature-enhanced CPC18 dataset.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct decision-relevant features.
+5. `R/10_ml_training.R` — create the subject-grouped ML datasets.
+
+Stages 06–09 are not required for this stage.
+
+The project root is explicitly set as the working directory before the pipeline scripts are sourced.
+
+# 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+knitr::opts_chunk$set(out.width = "70%", fig.align = "center")
+
+library(dplyr)
+library(tidyr)
+library(knitr)
+```
+
+# 4. Run ML Data Preparation
+
+The Stage 10 preparation is implemented in `R/10_ml_training.R`.
+
+The script splits participants into groups, builds the modelling datasets, runs the leakage and separation checks, and saves the results to `data/processed/`. It stops with an error if any check fails.
+
+```{r run-ml-training, include=FALSE}
+source("R/10_ml_preparation.R")
+```
+
+# 5. Subject-Grouped Split
+
+Participants, not individual decisions, are randomly assigned to training (70%), validation (15%), and test (15%) sets, using a fixed seed. Every decision made by a participant goes to that participant's set.
+
+This matters because the same person makes hundreds of decisions. If one person's decisions appeared in both training and test data, a model could score well by recognising that person's habits, and the result would overstate how well it predicts new people.
+
+```{r split-summary, echo=FALSE}
+kable(ml_split_summary, digits = 3)
+```
+
+The script verifies that no participant appears in more than one set. The check is made on the subject assignment and again on the final cleaned datasets. The split is random and not stratified, so the choice rates in the table show whether the three sets are comparable.
+
+# 6. Predictors
+
+The target is `chose_b`. The predictors are the engineered features known before the participant decides.
+
+```{r features, echo=FALSE}
+kable(data.frame(predictor = ml_features))
+```
+
+`subject_id` stays in the datasets only to identify participants for grouped resampling. It must be excluded when models are fitted.
+
+Most of these predictors describe the decision problem, not the participant. The only participant-specific information is the participant's position in the sequence of decisions (`game_order`, `trial_number`, and `time_block`).
+
+# 7. Leakage Prevention
+
+Information that only becomes available after a choice is made must not be used to predict that choice. The following variables are excluded from the modelling datasets, and the script stops if any of them is present:
+
+```{r leakage, echo=FALSE}
+kable(data.frame(excluded_variable = post_decision_variables))
+```
+
+Reaction time and the selected screen button are also excluded: they are recorded at the moment of choice, so they are not known beforehand.
+
+# 8. Missing Values and Cleaning
+
+Missing values were counted across the target and all predictors before any rows were removed.
+
+```{r missing, echo=FALSE}
+kable(missing_summary)
+```
+
+Rows with a missing target or predictor were removed. Rows removed: **`r format(rows_before_cleaning - rows_after_cleaning, big.mark = ",")`** of `r format(rows_before_cleaning, big.mark = ",")`.
+
+`payoff_correlation` is converted to a factor with levels −1, 0, and 1.
+
+# 9. Final Datasets
+
+```{r dataset-summary, echo=FALSE}
+kable(ml_dataset_summary, digits = 3)
+```
+
+The training set is used to fit models, the validation set to compare them and choose between them, and the test set only for the final evaluation in Stage 11. The test set must not be used for model selection or tuning.
+
+Scaling, encoding, and any other preprocessing that learns from data must be fitted on the training data only, inside resampling, and then applied to the validation and test sets.
+
+# 10. Outputs
+
+* `data/processed/ml_subject_split.csv` — split assigned to each participant
+* `data/processed/ml_split_summary.csv` — split summary before cleaning
+* `data/processed/ml_train.csv`, `ml_validation.csv`, `ml_test.csv` — cleaned modelling datasets
+* `data/processed/ml_feature_definition.csv` — predictors used
+
+# 11. Limitations
+
+* The split is by participant but not by decision problem. The same games appear in training, validation, and test data, so performance reflects prediction for new participants on known problems. It does not show how well the models generalize to new decision problems.
+* One random split gives one estimate. Performance can vary with which participants land in which set, and the validation and test sets are small compared with the training set.
+* Most predictors describe the game, so models may reach limited accuracy. Differences between individual participants will remain unexplained.
+* Prediction ability shows association, not causation.

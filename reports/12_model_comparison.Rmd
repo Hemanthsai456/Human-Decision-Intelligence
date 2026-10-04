@@ -1,0 +1,180 @@
+---
+title: "Stage 12 — Model Comparison"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+# 1. Purpose
+
+This stage compares the validation performance of the four candidate models trained in Stage 11:
+
+1. Logistic regression (GLM)
+2. Generalized additive model (GAM)
+3. Random Forest (Ranger)
+4. XGBoost
+
+The comparison covers discrimination, classification at a fixed threshold, probability quality, calibration, and, for the tree-based models, feature importance. The test set is not used.
+
+# 2. Prerequisites and Execution Order
+
+Stage 12 depends on the validation results saved by Stage 11.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct decision-relevant features.
+5. `R/10_ml_training.R` — create the subject-grouped training, validation, and test sets.
+6. `R/11_ml_training_evaluation.R` — train the four models and save validation results.
+7. `R/12_model_comparison.R` — compare the validation results.
+8. `reports/12_model_comparison.Rmd` — document the comparison.
+
+Stages 06–09 are not required for this stage.
+
+The project root is explicitly set as the working directory before the pipeline scripts are sourced.
+
+# 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+knitr::opts_chunk$set(echo = FALSE, out.width = "80%", fig.align = "center")
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+```
+
+The comparison is implemented in `R/12_model_comparison.R`, which is sourced here. The script builds the comparison tables and plots used in this report, saves the tables in `data/processed/`, and saves the plots as PNG files in `outputs/model_comparison/`.
+
+```{r load-results, include=FALSE}
+source("R/12_model_comparison.R")
+
+metrics <- comparison_metrics
+winners <- metric_winners
+confusion <- confusion_matrices
+importance <- feature_importance_comparison
+candidate <- candidate_assessment
+
+by_auc <- metrics %>% arrange(desc(roc_auc))
+trees <- metrics %>% filter(model %in% c("Ranger", "XGBoost"))
+simpler <- metrics %>% filter(model %in% c("GLM", "GAM"))
+top2 <- by_auc[1:2, ]
+```
+
+# 4. Comparison Strategy
+
+The comparison uses only the validation-set predictions and metrics from Stage 11.
+
+* **Higher is better:** accuracy, precision, recall, F1, ROC-AUC, PR-AUC.
+* **Lower is better:** Brier score, which measures the accuracy of predicted probabilities.
+* **Calibration:** an intercept near 0 and a slope near 1 are better.
+
+No composite score is built, because these metrics describe different aspects of performance and any weighting would be arbitrary.
+
+# 5. Validation Performance
+
+```{r validation-results}
+kable(metrics, digits = 3, caption = "Validation performance of the four models.")
+```
+
+The best model on each metric, as recorded by the script:
+
+```{r winners}
+kable(winners, digits = 3, caption = "Best model per validation metric.")
+```
+
+# 6. Confusion Matrices
+
+```{r confusion-matrices}
+confusion %>%
+  arrange(model, actual, predicted) %>%
+  select(model, actual, predicted, count) %>%
+  kable(caption = "Validation confusion matrices at the 0.5 threshold (actual 1 = chose B).")
+```
+
+The confusion matrices show how each model trades false positives against false negatives at the 0.5 threshold. They complement the threshold-free ROC-AUC and PR-AUC.
+
+# 7. ROC Analysis
+
+```{r roc-plot}
+roc_plot
+```
+
+The ROC curves show how well each model separates B choices from A choices across all thresholds. `r by_auc$model[1]` has the highest ROC-AUC (`r round(by_auc$roc_auc[1], 3)`), and `r by_auc$model[2]` is `r round(by_auc$roc_auc[1] - by_auc$roc_auc[2], 3)` lower. The tree-based models reach `r round(min(trees$roc_auc), 3)` to `r round(max(trees$roc_auc), 3)`, compared with `r round(min(simpler$roc_auc), 3)` to `r round(max(simpler$roc_auc), 3)` for the GLM and GAM.
+
+# 8. Precision-Recall Analysis
+
+```{r pr-plot}
+pr_plot
+```
+
+PR-AUC ranges from `r round(min(trees$pr_auc), 3)` to `r round(max(trees$pr_auc), 3)` for the tree-based models and from `r round(min(simpler$pr_auc), 3)` to `r round(max(simpler$pr_auc), 3)` for the GLM and GAM. The two classes are close to balanced, so the precision-recall curves tell a similar story to the ROC curves.
+
+# 9. Calibration
+
+```{r calibration-plot}
+calibration_plot
+```
+
+The dashed diagonal is perfect calibration. Across the four models, calibration slopes are within `r round(max(abs(metrics$calibration_slope - 1)), 3)` of 1, and intercepts are within `r round(max(abs(metrics$calibration_intercept)), 3)` of 0, so predicted probabilities correspond closely to observed choice rates.
+
+```{r calibration-table}
+metrics %>%
+  select(model, brier_score, calibration_intercept, calibration_slope) %>%
+  kable(digits = 3, caption = "Probability quality and calibration.")
+```
+
+# 10. Feature Importance
+
+Importance is compared only for the two tree-based models and is scaled to shares within each model, because Ranger's impurity importance and XGBoost's gain are not on the same scale.
+
+```{r feature-importance}
+importance %>%
+  select(model, feature, relative_importance) %>%
+  pivot_wider(names_from = model, values_from = relative_importance) %>%
+  arrange(desc(Ranger)) %>%
+  kable(digits = 3, caption = "Relative feature importance (share of total).")
+```
+
+XGBoost uses indicator variables for `payoff_correlation` (`correlation_negative`, `correlation_positive`), while Ranger uses the single factor, so those rows are not directly comparable and show missing values for one model. Impurity importance can also favour continuous features with many distinct values. These measures describe model behavior, not causal effects. They are interpreted further in the explainability stage.
+
+# 11. Candidate Evidence
+
+The script ranks the models separately on ROC-AUC, PR-AUC, and Brier score, and records distances from ideal calibration.
+
+```{r candidate-evidence}
+kable(candidate, digits = 3, caption = "Validation evidence for model selection, ordered by ROC-AUC rank.")
+```
+
+# 12. Outputs
+
+Tables in `data/processed/`:
+
+* `model_comparison_metrics.csv`, `model_comparison_summary.csv`, `model_metric_winners.csv`
+* `model_comparison_confusion_matrices.csv`, `model_comparison_predictions.csv`
+* `model_roc_curve_data.csv`, `model_pr_curve_data.csv`, `model_calibration_data.csv`
+* `model_feature_importance_comparison.csv`, `model_candidate_assessment.csv`
+
+Figures in `outputs/model_comparison/`:
+
+* `model_comparison_roc.png`, `model_comparison_pr.png`, `model_comparison_calibration.png`
+
+# 13. Interpretation
+
+The tree-based models predict B choices better than the GLM and GAM on discrimination, precision-recall performance, and probability quality, so nonlinear effects and interactions between the decision variables carry useful information.
+
+The two best models are `r top2$model[1]` and `r top2$model[2]`. They differ by `r round(abs(top2$roc_auc[1] - top2$roc_auc[2]), 3)` in ROC-AUC, `r round(abs(top2$pr_auc[1] - top2$pr_auc[2]), 3)` in PR-AUC, and `r round(abs(top2$brier_score[1] - top2$brier_score[2]), 3)` in Brier score. Differences this small, measured on one validation set, do not clearly separate the two models, so no single winner is declared here.
+
+# 14. Limitations
+
+* All comparisons use one fixed validation set of participants and carry sampling uncertainty that the tables do not show.
+* The tree-based models use untuned baseline settings, so the ranking may change after tuning.
+* The validation set has now been used to compare models, so its scores are optimistic as estimates of final performance.
+* The split is by participant but not by decision problem, so the results describe prediction for new participants on known problems.
+* Feature importance describes model behavior and is not evidence of causal effects.
+
+# 15. Next Steps
+
+Before final performance can be reported, the model configuration still needs to be chosen and, if wanted, tuned on training and validation data only. The untouched test set should then be evaluated once, with that final configuration.

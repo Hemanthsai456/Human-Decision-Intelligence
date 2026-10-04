@@ -1,0 +1,126 @@
+---
+title: "Stage 11 — ML Training and Evaluation"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+# 1. Purpose
+
+This stage trains and evaluates supervised models that predict whether a participant chooses option B (`chose_b`).
+
+Four model types are evaluated, in order of increasing flexibility:
+
+1. Logistic regression (GLM)
+2. Generalized additive model (GAM)
+3. Random Forest (Ranger)
+4. XGBoost
+
+All models use the same training and validation data and the same pre-decision predictors. The test set is not used at this stage.
+
+# 2. Prerequisites and Execution Order
+
+Stage 11 depends on the subject-grouped datasets created in Stage 10.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct decision-relevant features.
+5. `R/10_ml_training.R` — create the subject-grouped training, validation, and test sets.
+6. `R/11_ml_training_evaluation.R` — train and evaluate the models.
+7. `reports/11_ml_training_evaluation.Rmd` — document the results.
+
+Stages 06–09 are not required for this stage.
+
+The project root is explicitly set as the working directory before the report is knitted. The report reads the saved outputs of `R/11_ml_training_evaluation.R` and does not refit the models.
+
+# 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+knitr::opts_chunk$set(echo = FALSE)
+
+library(dplyr)
+library(knitr)
+```
+
+```{r load-results, include=FALSE}
+model_files <- c("glm", "gam", "ranger", "xgboost")
+
+metrics <- bind_rows(lapply(model_files, function(m) {
+  read.csv(paste0("data/processed/", m, "_metrics.csv"))
+}))
+
+by_auc <- metrics %>% arrange(desc(roc_auc))
+tree_auc <- metrics$roc_auc[metrics$model %in% c("Ranger", "XGBoost")]
+other_auc <- metrics$roc_auc[metrics$model %in% c("GLM", "GAM")]
+```
+
+# 4. Training Strategy
+
+The target is `chose_b`. Models are fitted on the training participants and evaluated on the validation participants. The split is by participant, so no one appears in both sets.
+
+The predictors are the pre-decision features defined in Stage 10: expected payoff, probability, payoff structure, lottery structure, ambiguity, payoff correlation, feedback, and temporal position. No post-decision information is used.
+
+`payoff_spread_diff` was identified as redundant during the GLM fit and is excluded from the predictor set for all models.
+
+Class predictions use a 0.5 probability threshold. The two classes are close to balanced, so accuracy is not distorted by class imbalance.
+
+# 5. Models
+
+**Logistic regression (GLM).** A binomial logistic regression with all predictors entering linearly. It is the interpretable baseline.
+
+**GAM.** The continuous decision variables enter as smooth functions, so nonlinear effects can be learned. Categorical and binary variables remain parametric. The model is fitted with REML.
+
+**Random Forest (Ranger).** A tree ensemble that can capture nonlinearities and interactions without specifying them. Settings: 500 trees, `mtry` equal to the square root of the number of predictors, minimum node size 10, probability estimation, seed 42.
+
+**XGBoost.** Boosted trees. `payoff_correlation` is converted to numeric indicator variables first. Settings: 300 rounds, maximum depth 6, learning rate 0.05, row and column subsampling 0.8, minimum child weight 5, seed 42.
+
+The Ranger and XGBoost settings are untuned baselines, not final choices.
+
+# 6. Validation Results
+
+```{r results-table, echo=FALSE}
+metrics %>%
+  select(model, accuracy, precision, recall, f1, roc_auc, pr_auc,
+         brier_score, calibration_intercept, calibration_slope) %>%
+  kable(digits = 3, row.names = FALSE)
+```
+
+How to read the table:
+
+* **ROC-AUC and PR-AUC** measure how well each model ranks B choices above A choices, regardless of threshold.
+* **Brier score** measures the accuracy of the predicted probabilities. Lower is better.
+* **Calibration intercept and slope** compare predicted and observed probabilities. An intercept near 0 and a slope near 1 mean the probabilities are well calibrated.
+* **Accuracy, precision, recall, and F1** depend on the 0.5 threshold.
+
+# 7. Interpretation
+
+`r by_auc$model[1]` has the highest validation ROC-AUC (`r round(by_auc$roc_auc[1], 3)`). The runner-up, `r by_auc$model[2]`, is `r round(by_auc$roc_auc[1] - by_auc$roc_auc[2], 3)` lower.
+
+The tree-based models reach ROC-AUC of `r round(min(tree_auc), 3)` to `r round(max(tree_auc), 3)`, compared with `r round(min(other_auc), 3)` to `r round(max(other_auc), 3)` for the GLM and GAM. This suggests that nonlinear effects and interactions among the decision variables carry predictive information that a linear model misses.
+
+The two tree-based models are close on the main metrics, so the data do not clearly separate them. Choosing between them is part of the Stage 12 comparison.
+
+Predictive performance is moderate. Most predictors describe the decision problem and not the participant, so differences between individual participants remain largely unexplained. That limits what any of these models can reach.
+
+These results show predictive association, not causal effects.
+
+# 8. Outputs
+
+Each model saves a fitted model object, validation metrics, a confusion matrix, and validation predictions in `data/processed/`:
+
+* `glm_*`, `gam_*`, `ranger_*`, `xgboost_*` (model `.rds` and `_metrics`, `_confusion_matrix`, `_validation_predictions` files)
+* `glm_coefficients.csv` — GLM coefficients and odds ratios
+* `ranger_feature_importance.csv` and `xgboost_feature_importance.csv` — feature importance
+
+Feature importance and coefficients are interpreted in Stage 13.
+
+# 9. Limitations
+
+* Results come from one fixed validation set of participants, so they carry sampling uncertainty that the table does not show.
+* Hyperparameters have not been tuned, so the flexible models may improve further.
+* The validation set has been used to compare models. The untouched test set is reserved for the final evaluation in Stage 12.
+* The split is by participant, not by decision problem. The same games appear in the training and validation sets, so the results describe prediction for new participants on known problems.
+* Model performance here is development evidence, not a final estimate of generalization.

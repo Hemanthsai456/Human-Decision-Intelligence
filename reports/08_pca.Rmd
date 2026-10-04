@@ -1,0 +1,84 @@
+---
+title: "Stage 08 — PCA"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---------------------
+
+## 1. Purpose
+
+Stage 08 applies Principal Component Analysis (PCA) to selected continuous decision-problem features to summarize their main dimensions of variation.
+
+## 2. Prerequisites and Execution Order
+
+Stage 08 depends on the feature-enhanced CPC18 dataset and the preceding exploratory and statistical analyses.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct decision-relevant features.
+5. `R/06_eda.R` — perform exploratory analysis.
+6. `R/07_statistical_analysis.R` — perform formal statistical analysis.
+7. `R/08_pca.R` — perform PCA.
+
+The project root is explicitly set as the working directory before the pipeline scripts are sourced.
+
+## 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+
+library(dplyr)
+library(ggplot2)
+```
+
+## 4. PCA Features
+
+PCA is applied to the following continuous decision-problem features:
+
+* `expected_payoff_diff`
+* `probability_diff`
+* `low_payoff_diff`
+* `high_lottery_ev_diff`
+* `payoff_spread_diff`
+* `lottery_outcomes_diff`
+
+The features are standardized before PCA so that differences in measurement scale do not dominate the components.
+
+## 5. PCA Analysis
+
+PCA is performed using `prcomp()`.
+
+The analysis examines:
+
+* proportion of variance explained by each component,
+* cumulative explained variance,
+* principal-component loadings,
+* observation-level PCA scores.
+
+## 6. Results
+
+The explained variance results are saved to:
+
+`data/processed/pca_explained_variance.csv`
+
+Feature loadings are saved to:
+
+`data/processed/pca_loadings.csv`
+
+Observation-level PCA scores are saved to:
+
+`data/processed/pca_scores.csv`
+
+A scree plot is generated to visualize the variance explained by each component.
+
+## 7. Interpretation
+
+The PCA results provide a lower-dimensional representation of the selected decision-problem features.
+
+The principal components are interpreted from their feature loadings rather than assigning arbitrary meanings to components.
+
+## 8. Limitations
+
+PCA is a dimensionality-reduction technique and does not establish causal relationships or behavioral mechanisms.

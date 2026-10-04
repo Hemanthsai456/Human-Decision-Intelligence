@@ -1,0 +1,164 @@
+---
+title: "Stage 14 — Explainability"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+# 1. Purpose
+
+This stage explains the finalized XGBoost model using global feature importance, SHAP explanations, and LIME local explanations.
+
+The explanations are computed on the test participants' predictors. Test outcomes are not used, and nothing is fitted or tuned here.
+
+# 2. Prerequisites and Execution Order
+
+Stage 14 depends on the finalized model from Stage 13 and the test data from Stage 10.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct decision-relevant features.
+5. `R/10_ml_training.R` — create the subject-grouped training, validation, and test sets.
+6. `R/13_model_tuning_finalization.R` — tune and finalize the model (`final_model.rds`).
+7. `R/14_explainability.R` — generate the explanations.
+8. `reports/14_explainability.Rmd` — document the explainability analysis.
+
+Stages 06–09, 11 and 12 are not required to run this stage.
+
+The project root is explicitly set as the working directory before the pipeline scripts are sourced.
+
+# 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+knitr::opts_chunk$set(echo = FALSE, out.width = "80%", fig.align = "center")
+
+library(dplyr)
+library(ggplot2)
+library(knitr)
+```
+
+The analysis is implemented in `R/14_explainability.R`, which is sourced here. The script loads the finalized model and test data, builds the importance, SHAP and LIME results, and saves the tables in `data/processed/` and the figures in `outputs/explainability/`.
+
+```{r run-explainability, include=FALSE}
+source("R/14_explainability.R")
+```
+
+# 4. Explainability Strategy
+
+The finalized XGBoost model is explained at three levels:
+
+* **Global importance:** which features contribute most to the fitted model.
+* **SHAP:** how much each feature adds to or subtracts from each prediction, summarized globally. SHAP values are on the log-odds scale of the model; positive values push toward choosing B.
+* **LIME:** local, case-specific explanations for a few test observations.
+
+These explanations describe how the fitted model behaves. They do not show causal effects of the decision variables.
+
+# 5. XGBoost Feature Importance
+
+Gain measures how much each feature improves the model's fit across the trees where it is used.
+
+```{r xgb-importance}
+importance_plot
+```
+
+```{r xgb-importance-table}
+xgb_importance %>%
+  select(Feature, Gain, Cover, Frequency) %>%
+  slice_head(n = 15) %>%
+  kable(digits = 3, caption = "Top XGBoost features by gain.")
+```
+
+# 6. SHAP Global Importance
+
+Global SHAP importance is the mean absolute SHAP value across all test observations.
+
+```{r shap-global}
+shap_bar_plot
+```
+
+```{r shap-global-table}
+shap_importance %>%
+  slice_head(n = 15) %>%
+  kable(digits = 3, caption = "Global SHAP importance.")
+```
+
+The top five features by SHAP importance are: `r paste(top_shap_features, collapse = ", ")`.
+
+# 7. SHAP Summary
+
+The beeswarm plot shows the spread of SHAP values across a random sample of `r format(nrow(shap_sample$S), big.mark = ",")` test observations. Each point is one observation; its horizontal position is the feature's contribution to that prediction, and its colour is the feature's value. Wider spread means the feature matters more for individual predictions.
+
+```{r shap-summary}
+shap_summary_plot
+```
+
+# 8. SHAP Dependence
+
+Dependence plots show how a feature's contribution changes across its values. They are shown for the top five features, in this order: `r paste(names(shap_dependence_plots), collapse = ", ")`.
+
+```{r shap-dependence, fig.height=5}
+for (plot in shap_dependence_plots) print(plot)
+```
+
+Where a curve is not a straight line, the model uses that feature nonlinearly. Spread of points at the same feature value shows that the contribution also depends on other features.
+
+# 9. LIME Local Explanations
+
+LIME explains single predictions by fitting a simple model around one observation. Each plot shows which feature values push that prediction toward or away from choosing B.
+
+`r length(lime_plots)` test observations were drawn at random with a fixed seed. Their predicted probabilities of choosing B:
+
+```{r lime-probabilities}
+lime_explanations %>%
+  distinct(case, label_prob) %>%
+  kable(digits = 3, col.names = c("Case", "Predicted probability of B"))
+```
+
+```{r lime-plots, fig.height=5}
+for (plot in lime_plots) print(plot)
+```
+
+# 10. Interpretation
+
+By XGBoost gain the most important feature is `r xgb_importance$Feature[1]`, and by SHAP importance it is `r shap_importance$feature[1]`. `r if (xgb_importance$Feature[1] == shap_importance$feature[1]) "The two measures agree on the top feature." else "The two measures disagree on the top feature, which is not unusual because they measure different things."`
+
+The dependence plots show how each of the top features shapes the model's output across its range. The LIME cases show that different observations can be driven by different combinations of features, so global importance should not be read as meaning every individual decision depends on the same variables.
+
+These results describe model behavior, not causal relationships. A large SHAP or gain value means a feature is influential in the fitted model, not that changing it would change human choice.
+
+# 11. Outputs
+
+Tables in `data/processed/`:
+
+* `final_xgboost_feature_importance.csv`
+* `shap_global_importance.csv`
+* `top_shap_features.csv`
+* `lime_local_explanations.csv`
+
+Figures in `outputs/explainability/`:
+
+* `xgboost_feature_importance.png`
+* `shap_summary.png`
+* `shap_global_importance.png`
+* `shap_dependence_expected_payoff_diff.png`
+* `shap_dependence_high_lottery_ev_diff.png`
+* `shap_dependence_low_payoff_diff.png`
+* `shap_dependence_probability_diff.png`
+* `shap_dependence_trial_number.png`
+* `lime_case_1.png through lime_case_5.png`
+
+# 12. Limitations
+
+* SHAP and LIME explain the fitted model and give no causal evidence.
+* LIME explanations are local approximations. They depend on random perturbations and can vary between runs, and five random cases do not represent every decision pattern.
+* SHAP dependence plots show associations learned by the model, not causal response curves, and correlated features can share credit.
+* Gain and SHAP importance measure different things, so their rankings need not match.
+* The beeswarm and dependence plots use a random sample of the test observations; global SHAP importance uses all of them.
+* The explanations are computed on one held-out test group of participants.
+
+# 13. Next Steps
+
+These results feed the decision-intelligence synthesis, which combines the choice patterns, statistical findings, clusters, model performance, and explanations into one interpretation.

@@ -1,0 +1,108 @@
+---
+title: "Stage 09 — Clustering"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+# 1. Purpose
+
+This stage applies K-means clustering to the PCA representation generated in Stage 08 to identify groups of structurally similar decision problems.
+
+The aim is descriptive: to examine whether decision problems form distinguishable profiles, not to explain or predict choices.
+
+# 2. Prerequisites and Execution Order
+
+Stage 09 depends on the PCA results generated in Stage 08.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct decision-relevant features.
+5. `R/06_eda.R` — perform exploratory analysis.
+6. `R/07_statistical_analysis.R` — perform formal statistical analysis.
+7. `R/08_pca.R` — reduce the dimensionality of the decision features.
+8. `R/09_clustering.R` — identify decision-problem clusters.
+9. `reports/09_clustering.Rmd` — document the clustering analysis.
+
+The project root is explicitly set as the working directory before the pipeline scripts are sourced.
+
+# 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+knitr::opts_chunk$set(out.width = "70%", fig.align = "center")
+
+library(dplyr)
+library(ggplot2)
+library(knitr)
+```
+
+# 4. Run Clustering Analysis
+
+The Stage 09 analysis is implemented in `R/09_clustering.R`.
+
+The script evaluates candidate cluster counts, fits the final K-means model, and generates the summaries and visualizations used in this report. Plots are also saved as PNG files in `outputs/clustering/`, and tables are saved in `data/processed/`.
+
+```{r run-clustering, include=FALSE}
+source("R/09_clustering.R")
+
+best <- silhouette_results[which.max(silhouette_results$silhouette), ]
+cluster_sizes <- read.csv("data/processed/clustering_sizes.csv")
+cluster_centers <- read.csv("data/processed/clustering_centers.csv")
+```
+
+# 5. Clustering Approach
+
+K-means is applied to the PCA components from Stage 08. Candidate cluster counts from `k = 2` to `k = 6` are compared using the average silhouette score, and the k with the highest score is selected.
+
+The final model is fitted on all `r format(nrow(cluster_assignments), big.mark = ",")` clustered observations. If the number of units is large, silhouette scores are computed on a random sample because the pairwise distance matrix grows quadratically with the number of units.
+
+# 6. Silhouette Analysis
+
+```{r silhouette-table, echo=FALSE}
+kable(silhouette_results, digits = 3)
+```
+
+```{r silhouette-plot, echo=FALSE}
+silhouette_plot
+```
+
+The highest average silhouette score is **`r round(best$silhouette, 3)`** at **k = `r best$k`**. The scores range only from `r round(min(silhouette_results$silhouette), 3)` to `r round(max(silhouette_results$silhouette), 3)`, and the y-axis is truncated, so the differences look larger than they are.
+
+Scores at this level are low, which indicates weak cluster structure: the clusters are better described as regions of a continuum than as sharply separated groups. The silhouette criterion supports k = `r best$k` only marginally.
+
+# 7. Final Clusters
+
+```{r sizes-table, echo=FALSE}
+kable(cluster_sizes)
+```
+
+```{r cluster-plot, echo=FALSE}
+cluster_plot
+```
+
+In the PC1–PC2 projection, clusters are ordered mainly along PC1, with some separation on PC2. Neighbouring clusters overlap considerably, and some centroids lie close together. Only two components are shown, so clusters that overlap here may be separated on the remaining components.
+
+# 8. Cluster Centers
+
+```{r centers-table, echo=FALSE}
+kable(cluster_centers, digits = 2)
+```
+
+The centers are positions in PCA space. To describe a cluster in terms of decision characteristics, read its center together with the Stage 08 loadings: a high value on a component means high values on the variables that load positively on it.
+
+# 9. Interpretation
+
+The clusters group decision problems that occupy similar positions in the PCA feature space. They are built from decision characteristics only and do not use observed choices, so they say nothing by themselves about how participants choose.
+
+Linking clusters to choice behavior would need a separate analysis, such as comparing B-choice rates across clusters while respecting the repeated-measures structure.
+
+# 10. Limitations
+
+* Silhouette scores are low, so the cluster structure is weak and the selected number of clusters is not strongly supported.
+* K-means is distance-based and favours compact, roughly spherical clusters. The result depends on the PCA representation and on the chosen k.
+* K-means is stochastic. Results are reproducible only with the seed set in `R/09_clustering.R`.
+* The PC1–PC2 plot is a two-dimensional projection and understates how clusters relate in the full PCA space.
+* Clusters are descriptive groupings, not evidence of distinct underlying types, and imply no causal claims.

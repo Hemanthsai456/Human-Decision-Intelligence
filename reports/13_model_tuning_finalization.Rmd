@@ -1,0 +1,161 @@
+---
+title: "Stage 13 — Model Tuning and Finalization"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+# 1. Purpose
+
+This stage tunes the two strongest candidates from Stage 12 (Ranger and XGBoost), compares their tuned validation performance, finalizes one model, and evaluates it once on the untouched test set.
+
+The final model is chosen using validation data only. It is then refit on the combined training and validation participants and scored once on the held-out test participants.
+
+# 2. Prerequisites and Execution Order
+
+Stage 13 depends on the subject-grouped datasets created in Stage 10.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct decision-relevant features.
+5. `R/10_ml_training.R` — create the subject-grouped training, validation, and test sets.
+6. `R/13_model_tuning_finalization.R` — tune, finalize, and evaluate on the test set.
+7. `reports/13_model_tuning_finalization.Rmd` — document the results.
+
+Stages 11 and 12 motivated the choice of Ranger and XGBoost as candidates but are not needed to run this stage. Stages 06–09 are not required.
+
+The project root is explicitly set as the working directory before the report is knitted. The report reads the saved outputs of `R/13_model_tuning_finalization.R` and does not rerun the tuning.
+
+# 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+knitr::opts_chunk$set(echo = FALSE)
+
+library(dplyr)
+library(knitr)
+```
+
+```{r load-results, include=FALSE}
+ranger_results <- read.csv("data/processed/ranger_tuning_results.csv")
+xgb_results <- read.csv("data/processed/xgboost_tuning_results.csv")
+tuned_metrics <- read.csv("data/processed/tuned_model_validation_metrics.csv")
+final_selection <- read.csv("data/processed/final_model_selection.csv")
+test_metrics <- read.csv("data/processed/final_test_metrics.csv")
+
+final_name <- final_selection$final_model
+final_validation <- tuned_metrics %>% filter(model == final_name)
+
+ranger_best <- ranger_results %>% arrange(desc(roc_auc), desc(pr_auc), brier_score) %>% slice(1)
+xgb_best <- xgb_results %>% arrange(desc(roc_auc), desc(pr_auc), brier_score) %>% slice(1)
+
+stage11 <- bind_rows(
+  read.csv("data/processed/ranger_metrics.csv") %>% mutate(model = "Ranger"),
+  read.csv("data/processed/xgboost_metrics.csv") %>% mutate(model = "XGBoost")
+) %>% filter(model == final_name)
+```
+
+# 4. Tuning Strategy
+
+Ranger and XGBoost performed almost identically in Stage 12, so both were tuned with a small, predefined grid instead of an exhaustive search. Every configuration was fitted on the training participants and scored on the validation participants. The test set was not used.
+
+**Ranger** (`r nrow(ranger_results)` configurations): `mtry` 3, 5, 7; `min.node.size` 5, 10, 20; `sample.fraction` 0.8; 500 trees.
+
+**XGBoost** (`r nrow(xgb_results)` configurations): `max_depth` 4, 6; `learning_rate` 0.03, 0.05; `min_child_weight` 5, 10; `subsample` 0.8; `colsample_bytree` 0.8; 300 rounds.
+
+The same metrics as in Stage 11 are used. Configurations are ranked by validation ROC-AUC, with PR-AUC and then Brier score as tie-breakers. The final model is chosen between the two tuned candidates by ROC-AUC, then Brier score.
+
+# 5. Ranger Tuning Results
+
+```{r ranger-results}
+ranger_results %>%
+  arrange(desc(roc_auc)) %>%
+  select(mtry, min.node.size, accuracy, precision, recall, f1, roc_auc, pr_auc, brier_score) %>%
+  kable(digits = 3, caption = "Ranger configurations, ordered by validation ROC-AUC.")
+```
+
+The selected Ranger configuration has mtry = `r ranger_best$mtry` and min.node.size = `r ranger_best$min.node.size`, with validation ROC-AUC `r round(ranger_best$roc_auc, 3)`. ROC-AUC ranges only from `r round(min(ranger_results$roc_auc), 3)` to `r round(max(ranger_results$roc_auc), 3)` across the grid, so the settings matter little.
+
+# 6. XGBoost Tuning Results
+
+```{r xgb-results}
+xgb_results %>%
+  arrange(desc(roc_auc)) %>%
+  select(max_depth, learning_rate, min_child_weight, accuracy, precision, recall,
+         f1, roc_auc, pr_auc, brier_score) %>%
+  kable(digits = 3, caption = "XGBoost configurations, ordered by validation ROC-AUC.")
+```
+
+The selected XGBoost configuration has max_depth = `r xgb_best$max_depth`, learning_rate = `r xgb_best$learning_rate` and min_child_weight = `r xgb_best$min_child_weight`, with validation ROC-AUC `r round(xgb_best$roc_auc, 3)`. ROC-AUC ranges from `r round(min(xgb_results$roc_auc), 3)` to `r round(max(xgb_results$roc_auc), 3)` across the grid.
+
+# 7. Tuned Model Comparison
+
+```{r tuned-comparison}
+kable(tuned_metrics, digits = 3, caption = "Validation performance of the tuned models.")
+```
+
+The two tuned models differ by `r round(abs(diff(tuned_metrics$roc_auc)), 3)` in ROC-AUC and `r round(abs(diff(tuned_metrics$brier_score)), 3)` in Brier score. A difference this small, measured on one validation set, is not evidence of a real performance gap, so the choice is a practical one and not a finding.
+
+# 8. Final Model Selection
+
+```{r final-selection}
+kable(final_selection, caption = "Final model selected using validation evidence.")
+```
+
+The selected model is **`r final_name`**. Its validation ROC-AUC is `r round(final_validation$roc_auc, 3)`, compared with `r round(stage11$roc_auc, 3)` for the untuned Stage 11 version. Tuning therefore changed validation performance only slightly, which suggests the Stage 11 settings were already near what this search could reach.
+
+# 9. Final Refit
+
+The selected configuration was refit on the training and validation participants combined. The test participants were not used for tuning, model selection, threshold selection, or fitting. The final model is saved as `data/processed/final_model.rds`.
+
+Because the validation participants are now part of the training data, validation scores are no longer an independent estimate. The test set is.
+
+# 10. Final Test Evaluation
+
+The test set was scored once, after the final model was fixed.
+
+```{r final-test}
+test_metrics %>%
+  select(model, accuracy, precision, recall, f1, roc_auc, pr_auc, brier_score,
+         calibration_intercept, calibration_slope) %>%
+  kable(digits = 3, caption = "Final model performance on the untouched test set.")
+```
+
+Test ROC-AUC is `r round(test_metrics$roc_auc, 3)` against `r round(final_validation$roc_auc, 3)` on validation, a difference of `r round(test_metrics$roc_auc - final_validation$roc_auc, 3)`. The test calibration intercept is `r round(test_metrics$calibration_intercept, 3)` and the slope `r round(test_metrics$calibration_slope, 3)`, close to the ideal 0 and 1, so predicted probabilities correspond closely to observed choice rates on new participants.
+
+Individual predictions are saved in `data/processed/final_test_predictions.csv` (`subject_id`, `actual`, `probability_b`, `predicted`).
+
+# 11. Interpretation
+
+The final model separates B choices from A choices with moderate accuracy for participants it has never seen, and its probabilities are well calibrated. Test performance is close to validation performance, which suggests the model is not overfitted to the validation participants.
+
+These are predictive results. They do not show that any predictor causes choices.
+
+# 12. Validation Controls
+
+* Participants are separated across training, validation, and test sets, so no one appears in more than one.
+* The test set was not used for tuning, model selection, threshold selection, or fitting.
+* The test evaluation ran once, after the final model was fixed.
+
+# 13. Outputs
+
+In `data/processed/`:
+
+* `ranger_tuning_results.csv`, `xgboost_tuning_results.csv`, `tuned_model_validation_metrics.csv`
+* `final_model_selection.csv`, `final_model.rds`
+* `final_test_metrics.csv`, `final_test_predictions.csv`
+* `ranger_tuned_model.rds`, `xgboost_tuned_model.rds`
+
+# 14. Limitations
+
+* The search space was small and predefined, so better settings may exist.
+* Tuning and model selection used one fixed validation set, so differences between close configurations may be noise.
+* The test result is one estimate from one held-out group of participants and carries sampling uncertainty that the table does not show.
+* The split is by participant, not by decision problem, so the results describe prediction for new participants on known problems, not for new decision problems.
+* Predictive performance does not establish causal effects.
+
+# 15. Next Steps
+
+The next stage explains how the finalized model uses the decision features, with global and local explainability methods. Those explanations describe model behavior, not causal effects.

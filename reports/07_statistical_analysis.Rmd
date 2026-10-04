@@ -1,5 +1,118 @@
 ---
-title: "07_statistical_analysis"
+title: "Stage 07 — Statistical Analysis"
+author: "Hemanth Sai Charagundla"
 output: html_document
----
+---------------------
 
+## 1. Purpose
+
+Stage 07 performs formal statistical analysis of CPC18 choice behavior using mixed-effects logistic regression.
+
+The analysis examines associations between Option B choice and expected payoff, probability, ambiguity, payoff structure, payoff correlation, feedback, and selected interactions.
+
+## 2. Prerequisites and Execution Order
+
+Stage 07 depends on the validated and feature-enhanced CPC18 dataset and the exploratory analysis completed in Stage 06.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct decision-relevant features.
+5. `R/06_eda.R` — perform exploratory analysis.
+6. `R/07_statistical_analysis.R` — perform formal statistical analysis.
+
+The project root is explicitly set as the working directory before the pipeline scripts are sourced.
+
+## 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+
+library(dplyr)
+library(lme4)
+library(broom.mixed)
+```
+
+## 4. Statistical Analysis
+
+The binary outcome is `chose_b`, representing whether Option B was selected.
+
+The analysis uses generalized linear mixed-effects models with:
+
+* standardized `expected_payoff_diff`
+* standardized `probability_diff`
+* standardized `payoff_spread_diff`
+* `ambiguous_b`
+* `payoff_correlation`
+* `full_feedback`
+
+Subject and game random intercepts are included to account for repeated observations:
+
+```text
+(1 | subject_id) + (1 | game_id)
+```
+
+The trial-level observations are aggregated into binomial counts for computationally efficient model fitting. The aggregation preserves all original observations.
+
+## 5. Research Questions
+
+The models examine:
+
+1. Whether expected-payoff advantage is associated with B choice.
+2. Whether probability difference is associated with B choice.
+3. Whether ambiguity is associated with B choice.
+4. Whether payoff structure is associated with B choice.
+5. Whether payoff correlation is associated with B choice.
+6. Whether feedback is associated with B choice.
+7. Whether the expected-payoff relationship differs under ambiguity.
+8. Whether the expected-payoff relationship differs under feedback.
+
+## 6. Model Evaluation
+
+Three models are fitted:
+
+* Main decision model
+* Expected payoff × ambiguity model
+* Expected payoff × feedback model
+
+Fixed-effect estimates are reported as odds ratios with 95% confidence intervals.
+
+Model diagnostics include:
+
+* AIC
+* log-likelihood
+* convergence status
+* singularity checks
+* likelihood-ratio tests for the interaction models
+
+Predictor correlations are also examined before interpreting the multivariable model.
+
+## 7. Results
+
+The statistical results are generated directly from the fitted models and saved to:
+
+`data/processed/statistical_model_results.csv`
+
+Model-fit and diagnostic information is saved to:
+
+`data/processed/statistical_model_fit.csv`
+
+The executed analysis represents 694,500 original observations using 55,560 aggregated modelling rows.
+
+## 8. Interpretation
+
+Results are interpreted using effect magnitude and uncertainty rather than p-values alone.
+
+Odds ratios describe associations with the odds of selecting Option B. The mixed-effects structure accounts for repeated observations within subjects and decision problems.
+
+The analysis does not treat statistical associations as causal effects unless supported by the experimental design.
+
+## 9. Limitations
+
+The analysis contains repeated observations from participants and structured decision problems, which are addressed through mixed-effects modelling.
+
+Some predictors are related to one another, so their estimates are interpreted within the multivariable model rather than independently.
+
+Reaction-time analysis is limited to observations for which RT is available.
