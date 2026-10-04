@@ -1,0 +1,171 @@
+---
+title: "Stage 15 — Decision Intelligence"
+author: "Hemanth Sai Charagundla"
+output: html_document
+---
+
+# 1. Purpose
+
+This stage brings the project's results together into one view of how people choose between options A and B.
+
+It combines the final model's test performance, its prediction behavior, the model's global decision factors (SHAP), the statistical associations from the mixed-effects model, and the behavioral profiles from clustering. No new model is trained.
+
+# 2. Prerequisites and Execution Order
+
+Stage 15 reads results saved by Stages 07, 09, 13 and 14.
+
+The required execution order is:
+
+1. `R/01_data_loading.R` — load the CPC18 raw dataset.
+2. `R/03_data_cleaning.R` — create the cleaned analytical dataset.
+3. `R/04_data_validation.R` — validate logical and structural consistency.
+4. `R/05_feature_engineering.R` — construct decision-relevant features.
+5. `R/07_statistical_analysis.R` — estimate the mixed-effects models.
+6. `R/08_pca.R` — reduce the dimensionality of the decision features.
+7. `R/09_clustering.R` — identify behavioral profiles.
+8. `R/10_ml_training.R` — create the subject-grouped ML datasets.
+9. `R/13_model_tuning_finalization.R` — finalize the model and score the test set.
+10. `R/14_explainability.R` — compute the SHAP importance.
+11. `R/15_decision_intelligence.R` — consolidate the evidence.
+12. `reports/15_decision_intelligence.Rmd` — document the synthesis.
+
+Stages 06, 11 and 12 are not required to run this stage.
+
+The project root is explicitly set as the working directory before the pipeline scripts are sourced.
+
+# 3. Load Required Packages
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+knitr::opts_chunk$set(echo = FALSE, out.width = "80%", fig.align = "center")
+
+library(dplyr)
+library(ggplot2)
+library(knitr)
+```
+
+The synthesis is implemented in `R/15_decision_intelligence.R`, which is sourced here. It reads the saved results of the earlier stages, builds the summary tables and the factor plot, and saves them in `data/processed/` and `outputs/decision_intelligence/`.
+
+```{r run-synthesis, include=FALSE}
+source("R/15_decision_intelligence.R")
+
+silhouette <- read.csv("data/processed/clustering_silhouette.csv")
+best_silhouette <- max(silhouette$silhouette)
+
+top5 <- decision_factor_summary %>% slice_head(n = 5)
+top3_share <- sum(head(decision_factor_summary$mean_abs_shap, 3)) /
+  sum(decision_factor_summary$mean_abs_shap)
+
+# Statistical direction for each top SHAP feature (odds ratios, 95% CI)
+stat_direction <- statistical_evidence %>%
+  mutate(direction = case_when(conf.low > 1 ~ "higher odds of B",
+                               conf.high < 1 ~ "lower odds of B",
+                               TRUE ~ "no clear association"))
+
+top5_agreement <- top5 %>%
+  rowwise() %>%
+  mutate(statistical_result = {
+    rows <- stat_direction[startsWith(stat_direction$term, feature), ]
+    if (nrow(rows) == 0) "not in the statistical model"
+    else paste(unique(rows$direction), collapse = "; ")
+  }) %>%
+  ungroup() %>%
+  select(rank, feature, mean_abs_shap, statistical_result)
+```
+
+# 4. Final Model Performance
+
+The finalized model was scored once on the held-out test participants.
+
+```{r model-performance}
+kable(final_model_summary, digits = 3, caption = "Final model performance on the test set.")
+```
+
+```{r prediction-summary}
+kable(prediction_summary, digits = 3, caption = "Test-set prediction summary.")
+```
+
+The model reaches a test ROC-AUC of `r round(final_model_summary$roc_auc, 3)` and an accuracy of `r round(final_model_summary$accuracy, 3)`, with a calibration slope of `r round(final_model_summary$calibration_slope, 3)` (1 is ideal). The observed rate of B choices is `r round(prediction_summary$actual_b_rate, 3)`, against a predicted rate of `r round(prediction_summary$predicted_b_rate, 3)` and a mean predicted probability of `r round(prediction_summary$mean_probability_b, 3)`.
+
+# 5. Global Decision Factors
+
+SHAP importance shows which features the final model relies on most. It describes model behavior, not causal effects.
+
+```{r top-factors-plot}
+factor_plot
+```
+
+```{r decision-factors}
+decision_factor_summary %>%
+  slice_head(n = 10) %>%
+  kable(digits = 3, caption = "Top ten features by mean absolute SHAP value, with share of total.")
+```
+
+The most important feature is `r decision_factor_summary$feature[1]`, and the top three features account for `r round(100 * top3_share)`% of total SHAP importance.
+
+# 6. Statistical Evidence
+
+The mixed-effects model estimates the association between each decision variable and choosing B while accounting for repeated choices by the same participants and within the same games. Estimates are odds ratios with 95% confidence intervals.
+
+```{r statistical-evidence}
+kable(statistical_evidence, digits = 3, caption = "Main mixed-effects model (odds ratios).")
+```
+
+Statistical models give estimated associations with uncertainty. SHAP describes how the predictive model uses its inputs. The two answer different questions, so the table below places them side by side for the top five model features.
+
+```{r agreement}
+kable(top5_agreement, digits = 3,
+      caption = "Top SHAP features and their statistical association with choosing B.")
+```
+
+# 7. Behavioral Profiles
+
+```{r behavioral-profiles}
+kable(cluster_profile_summary, digits = 2, caption = "Cluster sizes and centers in PCA space.")
+```
+
+The best average silhouette score in the clustering stage was `r round(best_silhouette, 3)`. `r if (best_silhouette < 0.25) "Scores this low indicate weak separation, so the profiles are better read as regions of a continuum than as distinct behavioral types." else "This indicates moderate separation between profiles."` The clusters use decision characteristics only, not the choices made.
+
+# 8. Integrated Summary
+
+```{r integrated-summary}
+decision_intelligence_summary %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+  t() %>%
+  kable(col.names = "Value", caption = "Decision-intelligence summary.")
+```
+
+# 9. Interpretation
+
+**What predicts choices.** The final model separates B choices from A choices with moderate accuracy for participants it has not seen, and its probabilities are well calibrated. Its main inputs are `r paste(top5$feature, collapse = ", ")`.
+
+**How the evidence fits together.** The table in Section 6 shows, for each of the top model features, whether the mixed-effects model also finds an association with choosing B. Where both agree, the predictive and statistical evidence support the same variable. Where a top model feature is absent from the statistical model, the model's reliance on it rests on prediction alone.
+
+**Behavioral structure.** The decision space shows some grouping along the main PCA components, but the weak silhouette scores mean the profiles describe regions of a continuum and not sharply separated types.
+
+All of these are predictive and associative patterns in the CPC18 data. None is a causal conclusion about why people choose as they do.
+
+# 10. Outputs
+
+In `data/processed/`:
+
+* `decision_intelligence_model_summary.csv`, `decision_intelligence_prediction_summary.csv`
+* `decision_factor_summary.csv`, `decision_statistical_evidence.csv`
+* `decision_behavioral_profiles.csv`, `decision_intelligence_summary.csv`
+
+In `outputs/decision_intelligence/`:
+
+* `top_decision_factors.png`
+
+# 11. Limitations
+
+* This stage summarizes earlier results and adds no new evidence. Its conclusions are only as strong as those stages.
+* SHAP importance and statistical odds ratios measure different things and use different scales, so they are compared by direction and relevance, not by size.
+* The statistical model uses random intercepts only, so its uncertainty for game-level variables may be understated.
+* The test result comes from one held-out group of participants and carries sampling uncertainty that the table does not show.
+* Most predictors describe the decision problem, not the participant, so individual differences remain largely unexplained.
+* Nothing here supports causal claims.
+
+# 12. Next Steps
+
+The summary tables and figures feed the Shiny application, which lets a user explore decision characteristics, choice patterns, the statistical findings, clusters, predictions and explanations.

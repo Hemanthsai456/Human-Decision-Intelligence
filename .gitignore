@@ -44,6 +44,9 @@ data/raw/*.csv
 data/processed/*.csv
 data/processed/*.rds
 
+# Rmd generated html docs
+reports/*.html
+
 # Secrets
 .env
 .env.*
