@@ -18,6 +18,7 @@ read_result <- function(file) {
   read.csv(file.path(project_root, "data/processed", file))
 }
 
+
 # Load processed results
 model_summary <- read_result("decision_intelligence_model_summary.csv")
 factor_summary <- read_result("decision_factor_summary.csv")
@@ -34,7 +35,7 @@ choice_vars <- c("expected_payoff_diff", "probability_diff", "payoff_spread_diff
                  "ambiguous_b", "payoff_correlation", "full_feedback",
                  "game_order", "trial_number", "time_block")
 
-choice_data <- read_result("cpc18_features.csv") %>% select(chose_b, all_of(choice_vars))
+choice_data <- read_result("shiny_choice_data.csv") %>% select(chose_b, all_of(choice_vars))
 
 ui <- dashboardPage(
   dashboardHeader(title = "Human Decision Intelligence"),

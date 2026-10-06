@@ -1,0 +1,2 @@
+"final_model","dataset","accuracy","precision","recall","f1","roc_auc","pr_auc","brier_score","calibration_intercept","calibration_slope"
+"XGBoost","test",0.709495238095238,0.727891761983177,0.641561243502991,0.682005358464602,0.790566858164909,0.79879732250497,0.183882477953256,-0.00330874706251108,0.996812291514233
