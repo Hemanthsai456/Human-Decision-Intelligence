@@ -1,0 +1,442 @@
+---
+title: "Human Decision Intelligence"
+subtitle: "Decision-Making Under Risk and Ambiguity"
+author: "Charagundla Hemanth Sai (Roll No: 160124771034)"
+date: "October 2026"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    theme: readable
+    self_contained: true
+---
+
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  out.width = "80%",
+  dpi = 300
+)
+```
+
+# Introduction and Problem Statement
+
+Human decisions under risk and uncertainty depend on more than the probability of winning. Choices may also reflect expected payoffs, downside outcomes, the range of possible outcomes, ambiguity, feedback, and experience across repeated decisions. Understanding how these factors relate to observed choices is difficult because each participant makes multiple decisions and the same decision problems are observed across participants.
+
+This project, **Human Decision Intelligence**, uses the Choice Prediction Competition 2018 (CPC18) dataset to investigate how characteristics of risky options are associated with choosing Option B, predict choices for participants not used during model fitting, and explain the predictions made by the selected model. The work is implemented in R as a staged, reproducible analytical workflow and includes an interactive Shiny application that displays precomputed results.
+
+**Course:** Introduction to Data Science  
+**Department:** Artificial Intelligence and Data Science  
+**Institution:** Chaitanya Bharathi Institute of Technology (CBIT), Hyderabad  
+**Student:** Charagundla Hemanth Sai — **Roll No.:** 160124771034
+
+## Objectives
+
+1. Prepare and validate the CPC18 data and engineer comparable, pre-decision features for Options A and B.
+2. Describe choice patterns and test adjusted associations with mixed-effects logistic regression.
+3. Explore decision-problem structure using principal component analysis (PCA) and K-means clustering.
+4. Compare predictive models and interpret the selected model using SHAP and LIME.
+
+# Prerequisites and Execution Order
+
+The analytical pipeline is separated into numbered scripts. The sequence below reflects the files in the project repository; the full pipeline requires the raw CPC18 file at `data/raw/CPC18.csv`.
+
+| Stage | Script | Purpose |
+|:--|:--|:--|
+| 01 | `R/01_data_loading.R` | Load the source data without modifying it |
+| 02 | `R/02_data_profiling.R` | Profile dimensions, data types, missingness, duplicates, and distributions |
+| 03 | `R/03_data_cleaning.R` | Create a cleaned analytical copy and flag reaction-time availability |
+| 04 | `R/04_data_validation.R` | Check coding, value ranges, trial/block consistency, payoffs, and reaction times |
+| 05 | `R/05_feature_engineering.R` | Calculate expected-payoff, probability, payoff-spread, and lottery differences |
+| 06 | `R/06_eda.R` | Generate descriptive summaries and EDA figures |
+| 07 | `R/07_statistical_analysis.R` | Fit mixed-effects logistic regression models |
+| 08 | `R/08_pca.R` | Reduce the selected continuous decision features to principal components |
+| 09 | `R/09_clustering.R` | Compare candidate cluster counts and fit K-means |
+| 10 | `R/10_ml_preparation.R` | Create participant-grouped splits and the pre-decision feature set |
+| 11 | `R/11_ml_training_evaluation.R` | Train and evaluate GLM, GAM, Ranger, and XGBoost |
+| 12 | `R/12_model_comparison.R` | Compare validation metrics and generate ROC, PR, and calibration curves |
+| 13 | `R/13_model_tuning_finalization.R` | Tune the strongest candidates and evaluate the selected model on the test set |
+| 14 | `R/14_explainability.R` | Generate feature-importance, SHAP, and LIME outputs |
+| 15 | `R/15_decision_intelligence.R` | Consolidate model, statistical, SHAP, and cluster summaries |
+| 16 | `app/app.R` | Run the Shiny application using precomputed artifacts |
+
+The report reads the committed summary CSV files and PNG figures; it does **not** retrain the models during knitting. To rerun all analyses, obtain CPC18 from the original source, place it at `data/raw/CPC18.csv`, restore the R dependencies, and execute the numbered scripts in order. The raw dataset and large intermediate files are not included in the public repository snapshot. The Shiny application is a lightweight results interface with Overview, Decision Analysis, Model Performance, Explainability, and Behavioral Profiles tabs.
+
+```{r load-report-artifacts, include=FALSE}
+read_artifact <- function(path) {
+  if (file.exists(path)) {
+    read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+  } else {
+    NULL
+  }
+}
+
+choice_data <- read_artifact("data/processed/shiny_choice_data.csv")
+model_summary <- read_artifact("data/processed/decision_intelligence_model_summary.csv")
+factor_summary <- read_artifact("data/processed/decision_factor_summary.csv")
+statistical_evidence <- read_artifact("data/processed/decision_statistical_evidence.csv")
+cluster_profiles <- read_artifact("data/processed/decision_behavioral_profiles.csv")
+final_test_predictions <- read_artifact("data/processed/final_test_predictions.csv")
+```
+
+# Dataset
+
+## Source and structure
+
+The project uses the **Choice Prediction Competition 2018 (CPC18)** dataset, which records repeated choices between risky options. It includes the choice outcome, lottery and payoff parameters, experimental conditions, participant and decision-problem identifiers, temporal context, and reaction time where recorded.
+
+| Dataset property | Description |
+|:--|:--|
+| Source data | 694,500 rows \(\times\) 30 columns |
+| Participants | 926 |
+| Decision problems / game identifiers | 270 |
+| Experimental sets | 9 |
+| Trials per game | 25 |
+| Feature-engineered data | 694,500 rows \(\times\) 43 columns |
+| Engineered pre-decision features | 18 |
+| Reaction-time availability | Approximately 51.8% of observations |
+
+CPC18 is suitable for this case study because it combines many repeated choices with attributes of both options and experimental conditions. This supports descriptive analysis, participant-aware prediction, and an examination of how decision features relate to observed choices. Reaction-time analyses are limited because reaction time is not recorded for every trial and is not used as a final-model predictor.
+
+## Target and important variables
+
+| Variable | Meaning in this project |
+|:--|:--|
+| `chose_b` | Binary target: 1 if Option B was selected, otherwise 0 |
+| `expected_payoff_diff` | Expected payoff of B minus expected payoff of A |
+| `probability_diff` | Probability of B's high outcome minus probability of A's high outcome |
+| `low_payoff_diff` | Low payoff of B minus low payoff of A |
+| `high_lottery_ev_diff` | High-outcome payoff of B minus high-outcome payoff of A |
+| `payoff_spread_diff` | Difference between the options' payoff spreads |
+| `ambiguous_b` and `full_feedback` | Experimental conditions |
+| `game_order`, `trial_number`, `time_block` | Decision order and temporal context |
+
+```{r overall-choice-summary, results='asis'}
+if (!is.null(choice_data) && "chose_b" %in% names(choice_data)) {
+  n_obs <- nrow(choice_data)
+  n_b <- sum(choice_data$chose_b == 1, na.rm = TRUE)
+  n_a <- sum(choice_data$chose_b == 0, na.rm = TRUE)
+  choice_table <- data.frame(
+    Measure = c("Total decisions", "Option A selections", "Option B selections", "Option B selection rate"),
+    Result = c(
+      format(n_obs, big.mark = ","),
+      format(n_a, big.mark = ","),
+      format(n_b, big.mark = ","),
+      sprintf("%.2f%%", 100 * mean(choice_data$chose_b == 1, na.rm = TRUE))
+    )
+  )
+  knitr::kable(choice_table, caption = "Choice distribution in the feature subset used by the application.")
+} else {
+  cat("The lightweight choice data file was not found; the summary table cannot be generated.")
+}
+```
+
+# Data Preparation
+
+Preparation preserves the original source file and creates separate analytical copies. The cleaning stage renames CPC18 fields to meaningful names, trims character values, converts empty strings to missing values, validates expected types, adds an indicator for reaction-time availability, and removes exact duplicate rows if present. Validation checks allowed categories and binary coding, probability bounds, correlation coding, game/trial ranges, trial-to-block consistency, payoff consistency, and reaction-time sanity.
+
+Feature engineering constructs pre-decision differences so the two options can be compared on common scales. The expected payoff calculation used by the project is illustrated below.
+
+```{r expected-payoff-code, eval=FALSE, echo=TRUE}
+# Expected payoff for each option: high outcome plus low outcome
+expected_payoff_a <- probability_a * expected_value_a +
+  (1 - probability_a) * low_payoff_a
+
+expected_payoff_b <- probability_b * expected_value_b +
+  (1 - probability_b) * low_payoff_b
+
+# Relative advantage of B over A; computed before observing the choice
+expected_payoff_diff <- expected_payoff_b - expected_payoff_a
+probability_diff <- probability_b - probability_a
+low_payoff_diff <- low_payoff_b - low_payoff_a
+payoff_spread_diff <- (expected_value_b - low_payoff_b) -
+  (expected_value_a - low_payoff_a)
+```
+
+The 18 engineered pre-decision features cover expected payoff, probability and lottery outcomes, payoff structure, ambiguity, payoff correlation, feedback, game order, trial number, and time block. Post-decision fields such as realized payoff, forgone payoff, the selected button, and reaction time were excluded from the predictive feature set to reduce target leakage.
+
+The machine-learning split was made **by participant**, not by individual row. This prevents the same subject from appearing in training, validation, and test data.
+
+| Split | Participants | Observations |
+|:--|--:|--:|
+| Training | 648 | 486,000 |
+| Validation | 138 | 103,500 |
+| Test | 140 | 105,000 |
+| **Total** | **926** | **694,500** |
+
+```{r ml-feature-selection-code, eval=FALSE, echo=TRUE}
+# Only information available before the decision is used for prediction
+ml_features <- c(
+  "expected_payoff_diff", "absolute_expected_payoff_diff",
+  "probability_diff", "absolute_probability_diff", "low_payoff_diff",
+  "high_lottery_ev_diff", "payoff_spread_diff", "lottery_outcomes_diff",
+  "ambiguous_b", "payoff_correlation", "full_feedback",
+  "game_order", "trial_number", "time_block"
+)
+target <- "chose_b"
+```
+
+# Exploratory and Statistical Analysis
+
+## Exploratory data analysis
+
+The descriptive analysis shows that the overall choice distribution is close to balanced: Option B was selected in approximately **47.7%** of all decisions. The clearest EDA pattern is the monotonic increase in B selection as B's expected-payoff advantage increases. The observed B-choice rate ranges from approximately 21.8% in the lowest expected-payoff-difference group to 85.2% in the highest group.
+
+The raw B-choice rate also differs by ambiguity condition (about 47.0% versus 52.0%), a descriptive difference of roughly five percentage points. This is not by itself evidence of an adjusted ambiguity effect; the mixed-effects model result is reported below. Probability-difference bins show a more dispersed, non-linear pattern than expected payoff alone. Aggregate choice rates remain comparatively stable across time blocks and game order.
+
+```{r eda-expected-payoff, fig.cap="Choice B rate across groups of expected-payoff difference (B minus A).", out.width="75%", fig.height=3.2}
+if (file.exists("outputs/eda/choice_by_expected_payoff.png")) {
+  knitr::include_graphics("outputs/eda/choice_by_expected_payoff.png")
+} else {
+  cat("Expected-payoff EDA figure not found.")
+}
+```
+
+The expected-payoff pattern is the strongest descriptive relationship in the EDA. It motivates a formal model that adjusts for other decision attributes and accounts for repeated choices. The probability-difference, feedback, time-block, game-order, choice-distribution, and reaction-time plots are retained in `outputs/eda/`; the main report shows representative figures instead of reproducing every descriptive chart.
+
+```{r eda-ambiguity, fig.cap="Observed choice proportions by ambiguity condition. This is descriptive, not an adjusted estimate.", out.width="70%", fig.height=3.0}
+if (file.exists("outputs/eda/choice_by_ambiguity.png")) {
+  knitr::include_graphics("outputs/eda/choice_by_ambiguity.png")
+} else {
+  cat("Ambiguity EDA figure not found.")
+}
+```
+
+Reaction time was available for about 51.8% of observations. Among recorded values, the median was approximately 657 ms and the mean was approximately 1,349 ms, indicating a right-skewed distribution with a small number of very long values. Because availability is restricted across experimental conditions, reaction time was explored separately and was not included in the final choice-prediction model.
+
+## Mixed-effects statistical analysis
+
+The statistical stage aggregates trial-level data into **55,560 grouped rows**, while retaining the counts of A and B choices across all 694,500 trials. Mixed-effects logistic regression includes random intercepts for participant and game to account for repeated observations. The main model adjusts for expected-payoff difference, probability difference, ambiguity, payoff spread, payoff correlation, and feedback. Additional models examine expected-payoff interactions with ambiguity and feedback.
+
+Fixed-effect results are expressed as odds ratios (OR) with 95% confidence intervals. Continuous predictors in the model are standardized, so their ORs represent a one-standard-deviation increase.
+
+```{r statistical-results-table, results='asis'}
+if (!is.null(statistical_evidence)) {
+  label_map <- c(
+    expected_payoff_diff = "Expected payoff difference (per SD)",
+    probability_diff = "Probability difference (per SD)",
+    ambiguous_b1 = "Ambiguity indicator",
+    payoff_spread_diff = "Payoff spread difference (per SD)",
+    `payoff_correlation-1` = "Correlation -1 vs 0",
+    payoff_correlation1 = "Correlation +1 vs 0",
+    full_feedback1 = "Full feedback indicator"
+  )
+  ord <- match(names(label_map), statistical_evidence$term)
+  stat <- statistical_evidence[ord[!is.na(ord)], , drop = FALSE]
+  stat$Predictor <- unname(label_map[stat$term])
+  stat$`Odds ratio` <- sprintf("%.2f", stat$odds_ratio)
+  stat$`95% CI` <- sprintf("%.2f to %.2f", stat$conf.low, stat$conf.high)
+  stat$`p-value` <- ifelse(stat$p.value < 0.001, "<0.001", sprintf("%.3f", stat$p.value))
+  stat$Interpretation <- ifelse(
+    stat$ci_excludes_1 & stat$odds_ratio > 1, "Higher odds of B",
+    ifelse(stat$ci_excludes_1 & stat$odds_ratio < 1, "Lower odds of B", "Not conclusive")
+  )
+  stat_out <- stat[, c("Predictor", "Odds ratio", "95% CI", "p-value", "Interpretation")]
+  knitr::kable(stat_out, caption = "Main mixed-effects logistic regression; odds ratios and 95% confidence intervals.")
+} else {
+  cat("The statistical evidence CSV was not found; the result table cannot be generated.")
+}
+```
+
+Expected-payoff difference was the strongest supported association: a one-standard-deviation increase corresponded to about **3.04 times the odds** of choosing B (95% CI 2.66 to 3.47, p approximately \(3.15 \times 10^{-60}\)). Probability difference (OR about 0.706), payoff-spread difference (OR about 0.642), and full feedback (OR about 1.069) were also statistically associated with choice in the adjusted model. The ambiguity estimate was not statistically conclusive at the 5% level (p approximately 0.106), despite the five-point raw difference seen in EDA. This difference illustrates why descriptive patterns and adjusted model estimates should not be treated as interchangeable.
+
+The probability-difference coefficient is conditional on the other predictors in the model. Given the relationships among lottery attributes, it should not be interpreted as a stand-alone, unadjusted effect of probability on choice. These are statistical associations, not causal effects.
+
+```{r mixed-effects-code, eval=FALSE, echo=TRUE}
+# Main model: repeated observations are grouped by subject and game
+model_main <- lme4::glmer(
+  cbind(n_b, n_a) ~ expected_payoff_diff + probability_diff +
+    ambiguous_b + payoff_spread_diff + payoff_correlation + full_feedback +
+    (1 | subject_id) + (1 | game_id),
+  data = analysis_data,
+  family = binomial
+)
+```
+
+# PCA and Behavioral Clustering
+
+PCA was applied to six numeric decision features: expected-payoff difference, probability difference, low-payoff difference, high-lottery expected-value difference, payoff-spread difference, and lottery-outcome difference. K-means clustering was then performed on the PCA representation. Candidate values from \(k=2\) through \(k=6\) were compared using an average silhouette score calculated on a 10,000-observation sample. The highest tested score was approximately **0.226 at \(k=6\)**.
+
+```{r cluster-size-table, results='asis'}
+if (!is.null(cluster_profiles)) {
+  cluster_table <- data.frame(
+    Cluster = cluster_profiles$cluster,
+    Observations = format(cluster_profiles$observations, big.mark = ","),
+    `Share of observations` = sprintf("%.1f%%", 100 * cluster_profiles$observations / sum(cluster_profiles$observations)),
+    check.names = FALSE
+  )
+  knitr::kable(cluster_table, caption = "Sizes of the six K-means clusters.")
+} else {
+  cat("The behavioral profile CSV was not found; cluster sizes cannot be generated.")
+}
+```
+
+```{r cluster-pca-plot, fig.cap="Clusters in the first two principal components; the plot displays a random sample with cluster centroids labelled.", out.width="73%", fig.height=3.5}
+if (file.exists("outputs/clustering/clustering_pca.png")) {
+  knitr::include_graphics("outputs/clustering/clustering_pca.png")
+} else {
+  cat("PCA cluster figure not found.")
+}
+```
+
+The PCA visualization shows overlap between several clusters, and the maximum silhouette score is relatively low. Therefore, the six clusters are best treated as **descriptive groups within a continuum of decision-problem features**, not as sharply separated behavioral types or personality categories. The clustering was based on decision attributes, not the choice outcome, and is separate from the predictive model.
+
+# Prediction Models
+
+## Validation comparison and model selection
+
+Four classification models were evaluated on validation participants: GLM, GAM, Random Forest (`ranger`), and XGBoost. Accuracy and F1-score measure classification at the selected threshold; ROC-AUC and PR-AUC measure ranking across thresholds; the Brier score assesses probability accuracy, where lower is better.
+
+| Model | Accuracy | ROC-AUC | F1-score | PR-AUC | Brier score |
+|:--|--:|--:|--:|--:|--:|
+| GLM | 0.6773 | 0.7410 | 0.6663 | 0.7128 | 0.2072 |
+| GAM | 0.6799 | 0.7567 | 0.6553 | 0.7467 | 0.1991 |
+| Ranger | 0.7040 | 0.7909 | 0.6687 | 0.7959 | 0.1833 |
+| XGBoost | 0.7054 | 0.7905 | 0.6705 | 0.7953 | 0.1836 |
+
+The tree-based models outperformed GLM and GAM on the principal ranking metrics. The initial Ranger and XGBoost results were very close, so the two were tuned using validation data. In the tuned comparison, XGBoost reached validation ROC-AUC 0.7922 and Brier score 0.1828, compared with 0.7909 and 0.1830 for Ranger. XGBoost was selected using validation ROC-AUC first and Brier score as the tie-breaker. The held-out test set was reserved for evaluation after model selection.
+
+```{r validation-roc-plot, fig.cap="ROC curves for the four candidate models on the validation set. The diagonal represents chance-level ranking.", out.width="72%", fig.height=3.2}
+if (file.exists("outputs/model_comparison/model_comparison_roc.png")) {
+  knitr::include_graphics("outputs/model_comparison/model_comparison_roc.png")
+} else {
+  cat("Validation ROC figure not found.")
+}
+```
+
+```{r validation-calibration-plot, fig.cap="Calibration curves on validation data. The dashed diagonal represents ideal agreement between mean predicted probability and observed choice rate.", out.width="72%", fig.height=3.2}
+if (file.exists("outputs/model_comparison/model_comparison_calibration.png")) {
+  knitr::include_graphics("outputs/model_comparison/model_comparison_calibration.png")
+} else {
+  cat("Validation calibration figure not found.")
+}
+```
+
+The precision-recall curve is also generated and retained in `outputs/model_comparison/model_comparison_pr.png`. It is not repeated here because PR-AUC is reported in the validation and final test tables, keeping the main report focused while preserving the full figure in the repository.
+
+## Final held-out test performance
+
+After tuning and selection, XGBoost was refitted using the combined training and validation participants and evaluated once on the held-out test participants.
+
+```{r final-test-metrics, results='asis'}
+if (!is.null(model_summary) && nrow(model_summary) > 0) {
+  m <- model_summary[1, ]
+  test_n <- if (!is.null(final_test_predictions)) nrow(final_test_predictions) else NA_integer_
+  metric_table <- data.frame(
+    Metric = c("Final model", "Test observations", "Accuracy", "Precision", "Recall", "F1-score", "ROC-AUC", "PR-AUC", "Brier score", "Calibration intercept", "Calibration slope"),
+    Result = c(
+      as.character(m$final_model),
+      if (is.na(test_n)) "105,000" else format(test_n, big.mark = ","),
+      sprintf("%.2f%%", 100 * m$accuracy),
+      sprintf("%.4f", m$precision),
+      sprintf("%.4f", m$recall),
+      sprintf("%.4f", m$f1),
+      sprintf("%.4f", m$roc_auc),
+      sprintf("%.4f", m$pr_auc),
+      sprintf("%.4f", m$brier_score),
+      sprintf("%.4f", m$calibration_intercept),
+      sprintf("%.4f", m$calibration_slope)
+    )
+  )
+  knitr::kable(metric_table, caption = "Performance of the finalized model on the held-out test set.")
+} else {
+  cat("The final model summary CSV was not found; test metrics cannot be generated.")
+}
+```
+
+The final model achieved approximately **70.95% test accuracy** and **0.7906 ROC-AUC**. The PR-AUC was 0.7988 and the Brier score was 0.1839. The calibration slope was close to 1 and the intercept close to 0. The observed Option B rate in the test set was approximately 48.56%, while the mean predicted probability was approximately 48.61%. The rate of hard predictions assigned to B was lower (about 42.80%) because it depends on the 0.5 classification threshold; it is not the same as the mean predicted probability.
+
+These metrics indicate useful but imperfect discrimination for new participants on the decision problems represented in this dataset. The test result is an estimate from one held-out participant group; performance on a different dataset or on entirely new decision problems has not been established.
+
+# Explainability and Decision Intelligence
+
+SHAP and LIME were used to examine the final XGBoost model at complementary levels. SHAP summarizes feature contributions across many predictions, while LIME approximates the model locally around one observation. Both explain model behavior, not causal effects.
+
+## Global SHAP results
+
+The largest global SHAP contributions came from expected-payoff difference, low-payoff difference, high-lottery expected-value difference, probability difference, and trial number. The table below shows the five leading features and their contribution to total mean absolute SHAP importance.
+
+```{r shap-factor-table, results='asis'}
+if (!is.null(factor_summary)) {
+  top_factors <- head(factor_summary, 5)
+  factor_table <- data.frame(
+    Rank = top_factors$rank,
+    Feature = top_factors$feature,
+    `Mean absolute SHAP` = sprintf("%.3f", top_factors$mean_abs_shap),
+    `Share of total` = sprintf("%.1f%%", 100 * top_factors$share),
+    check.names = FALSE
+  )
+  cat("The top three features account for ", sprintf("%.1f%%", 100 * sum(head(factor_summary$share, 3))),
+      " of total SHAP importance, and the top five account for ", sprintf("%.1f%%", 100 * sum(head(factor_summary$share, 5))), ".\n\n", sep = "")
+  knitr::kable(factor_table, caption = "Five leading features in the final model by global SHAP importance.")
+} else {
+  cat("The decision factor summary CSV was not found; the SHAP ranking table cannot be generated.")
+}
+```
+
+```{r shap-summary-plot, fig.cap="SHAP summary plot for the final XGBoost model. Each point represents a test observation; SHAP values show the contribution to the model output and colour encodes the feature value.", out.width="78%", fig.height=3.6}
+if (file.exists("outputs/explainability/shap_summary.png")) {
+  knitr::include_graphics("outputs/explainability/shap_summary.png")
+} else {
+  cat("SHAP summary figure not found.")
+}
+```
+
+The importance ranking indicates that the model relies most on relative expected payoff, followed by payoff downside and high-outcome payoff characteristics. Higher expected-payoff-difference values generally push predictions toward choosing B, while lower values tend to push in the opposite direction. These patterns describe the fitted model, not a causal response to changing a decision attribute.
+
+## Local LIME example
+
+```{r lime-example-plot, fig.cap="One local LIME explanation for a held-out prediction. Blue bars support the predicted class and red bars oppose it; the local explanation fit shown in the plot is approximately 0.55.", out.width="78%", fig.height=3.6}
+if (file.exists("outputs/explainability/lime_case_5.png")) {
+  knitr::include_graphics("outputs/explainability/lime_case_5.png")
+} else {
+  cat("LIME example figure not found.")
+}
+```
+
+The selected LIME figure is one illustrative local explanation; it does not represent all predictions. The remaining LIME cases, SHAP dependence plots for the leading features, and alternative feature-importance figures are retained in `outputs/explainability/`. They are not duplicated here because they repeat similar rankings or local examples. Stage 15 consolidates the final metrics, statistical evidence, SHAP rankings, and cluster profiles into the decision-intelligence outputs used by the Shiny application.
+
+# Conclusion and Limitations
+
+This project developed an end-to-end R workflow for studying choices under risk and ambiguity, from data preparation and descriptive analysis through statistical modeling, clustering, prediction, explainability, and dashboard delivery. The main statistical result is the strong adjusted association between expected-payoff difference and choosing Option B. The final XGBoost model achieved 70.95% accuracy, ROC-AUC 0.7906, and PR-AUC 0.7988 on 105,000 held-out test observations. SHAP identified expected-payoff difference as the dominant feature in the final model.
+
+The workflow integrates multiple perspectives: EDA describes observed patterns, mixed-effects regression estimates adjusted associations, PCA and clustering summarize similarities between decision problems, and machine learning predicts choices for participants not used in model fitting. SHAP and LIME add global and local interpretations of the trained model, while the Shiny application makes selected results accessible through an interactive interface.
+
+The findings have important limitations. The final model was evaluated on one held-out group of participants and has not been independently validated on another dataset. Cluster separation is modest (maximum tested silhouette approximately 0.226), so the six clusters should be treated as descriptive groupings rather than distinct psychological types. Reaction time is missing for many observations. Finally, model importance and statistical association do not establish causality or provide a complete explanation of individual decision-making.
+
+# Dataset Source, Project Links, and Reproducibility
+
+## Project links
+
+- **GitHub repository:** <https://github.com/Hemanthsai456/Human-Decision-Intelligence>
+- **R analysis scripts:** <https://github.com/Hemanthsai456/Human-Decision-Intelligence/tree/main/R>
+- **R Markdown reports:** <https://github.com/Hemanthsai456/Human-Decision-Intelligence/tree/main/reports>
+- **Shiny application source:** <https://github.com/Hemanthsai456/Human-Decision-Intelligence/tree/main/app>
+- **CPC18 dataset record:** <https://doi.org/10.5281/zenodo.2571510>
+- **Official CPC18 website:** <https://cpc-18.com/>
+- **Live Shiny demo:** Not publicly deployed as of this report version.
+
+## Reproducing the report and analysis
+
+1. Clone or download the project repository and open `Human-Decision-Intelligence.Rproj` in RStudio.
+2. Restore the project library using `renv::restore()`.
+3. To render this report from the repository root, run:
+
+   ```r
+   rmarkdown::render("reports/FINAL_PROJECT_REPORT.Rmd",output_format = "html_document")
+   ```
+
+4. To rerun the complete analysis, obtain the CPC18 data from the source above and place the CSV at `data/raw/CPC18.csv`, subject to the dataset's terms. Execute the numbered scripts in `R/` in order. The report itself uses selected committed summary artifacts and figures so it does not retrain the models while knitting.
+
+The public repository intentionally does not include the raw CPC18 dataset or all large intermediate datasets. Redistribution of the raw data must follow the conditions set by the dataset source.
+
+## Reference
+
+Plonsky, O., Erev, I., & Ert, E. (2019). *All raw data for CPC18: Choice Prediction Competition 2018* [Dataset]. Zenodo. <https://doi.org/10.5281/zenodo.2571510>
