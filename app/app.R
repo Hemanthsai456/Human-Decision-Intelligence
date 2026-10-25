@@ -13,6 +13,11 @@ library(shinydashboard)
 library(dplyr)
 library(ggplot2)
 
+# Deployment checks
+cat("R version:", R.version.string, "\n")
+cat("Working directory:", getwd(), "\n")
+cat("Files here:", paste(list.files(), collapse = ", "), "\n")
+
 # Paths are relative to the project root
 project_root <- if (dir.exists("data/processed")) "." else ".."
 
