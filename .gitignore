@@ -41,7 +41,6 @@ renv/staging/
 renv/sandbox/
 
 # Data
-data/raw/*.csv
 data/processed/*.csv
 data/processed/*.rds
 
