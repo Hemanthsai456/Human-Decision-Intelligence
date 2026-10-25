@@ -44,6 +44,13 @@ renv/sandbox/
 data/processed/*.csv
 data/processed/*.rds
 
+!data/processed/decision_intelligence_model_summary.csv
+!data/processed/decision_factor_summary.csv
+!data/processed/decision_statistical_evidence.csv
+!data/processed/decision_behavioral_profiles.csv
+!data/processed/final_test_predictions.csv
+!data/processed/shiny_choice_data.csv
+
 # Rmd generated html docs
 reports/*.html
 
