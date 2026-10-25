@@ -18,11 +18,32 @@ cat("R version:", R.version.string, "\n")
 cat("Working directory:", getwd(), "\n")
 cat("Files here:", paste(list.files(), collapse = ", "), "\n")
 
-# Paths are relative to the project root
-project_root <- if (dir.exists("data/processed")) "." else ".."
+# Resolve the project root in both local RStudio and hosted deployments.
+# The app may start from the repository root or from the app/ directory.
+root_candidates <- c(".", "..")
+root_candidates <- root_candidates[
+  vapply(root_candidates, function(path) {
+    file.exists(file.path(path, "data", "processed",
+                          "decision_intelligence_model_summary.csv"))
+  }, logical(1))
+]
+
+if (length(root_candidates) == 0) {
+  stop(
+    "Could not locate data/processed. Working directory: ", getwd(),
+    ". Ensure the repository's data/processed directory is included in deployment."
+  )
+}
+
+project_root <- normalizePath(root_candidates[1], mustWork = TRUE)
+processed_dir <- file.path(project_root, "data", "processed")
 
 read_result <- function(file) {
-  read.csv(file.path(project_root, "data/processed", file))
+  path <- file.path(processed_dir, file)
+  if (!file.exists(path)) {
+    stop("Required processed result file not found: ", path)
+  }
+  read.csv(path, stringsAsFactors = FALSE)
 }
 
 # Load processed results
@@ -51,9 +72,33 @@ choice_vars <- c(
   "Time block" = "time_block"
 )
 
-choice_data <- read_result("shiny_choice_data.csv") %>%
-  # choice_vars is a named display-label -> column-name vector; select its values.
-  select(chose_b, all_of(unname(choice_vars)))
+# This file is relatively large. Read only the columns used by the app when
+# data.table is available; retain a base-R fallback for simpler deployments.
+choice_file <- file.path(processed_dir, "shiny_choice_data.csv")
+choice_columns <- c("chose_b", unname(choice_vars))
+
+if (!file.exists(choice_file)) {
+  stop("Required choice data file not found: ", choice_file)
+}
+
+if (requireNamespace("data.table", quietly = TRUE)) {
+  choice_data <- data.table::fread(
+    choice_file,
+    select = choice_columns,
+    showProgress = FALSE,
+    data.table = FALSE
+  )
+} else {
+  choice_data <- read.csv(choice_file, stringsAsFactors = FALSE)
+  missing_columns <- setdiff(choice_columns, names(choice_data))
+  if (length(missing_columns) > 0) {
+    stop("Missing columns in shiny_choice_data.csv: ",
+         paste(missing_columns, collapse = ", "))
+  }
+  choice_data <- dplyr::select(choice_data, dplyr::all_of(choice_columns))
+}
+
+rm(choice_columns)
 
 # ----------------------------- UI -----------------------------
 ui <- dashboardPage(
@@ -267,7 +312,6 @@ server <- function(input, output, session) {
   
   output$choice_plot <- renderPlot({ make_choice_plot() })
   output$overview_choice_plot <- renderPlot({
-    old_var <- input$choice_var
     # Overview always shows expected payoff difference, independent of the detail-page control.
     x <- choice_data$expected_payoff_diff
     bin <- if (dplyr::n_distinct(x) <= 10) factor(x) else {
